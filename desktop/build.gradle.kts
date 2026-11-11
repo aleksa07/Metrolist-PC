@@ -68,6 +68,8 @@ dependencies {
 
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-swing:1.11.0")
     implementation("net.java.dev.jna:jna:5.17.0")
+    // MPRIS media controls on Linux (Windows uses SMTC directly through JNA).
+    implementation("dev.toastbits:mediasession:0.1.1")
     implementation(libs.protobuf.javalite)
     implementation(libs.protobuf.kotlin.lite)
     // Embedded Chromium for Google sign-in; its natives download on first use, not in the installer.

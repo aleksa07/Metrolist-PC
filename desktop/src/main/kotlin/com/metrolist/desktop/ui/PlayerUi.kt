@@ -83,7 +83,12 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.foundation.Canvas
 import androidx.compose.ui.unit.sp
 import coil3.compose.AsyncImage
 import com.metrolist.desktop.data.Library
@@ -127,6 +132,7 @@ private fun SeekBar(modifier: Modifier = Modifier, light: Boolean = false) {
             },
             modifier = Modifier.weight(1f).padding(horizontal = 8.dp).height(24.dp),
             colors = colors,
+            thumb = { DotThumb(colors) },
             track = { GaplessTrack(it, colors) },
         )
         Text(if (duration > 0) formatDuration(duration / 1000) else "--:--", style = MaterialTheme.typography.labelMedium, color = textColor, modifier = Modifier.width(48.dp))
@@ -172,8 +178,25 @@ private fun TransportButtons(big: Boolean = false, light: Boolean = false) {
 /** Track without the gap Material 3 leaves around the thumb, which hid the filled part at low values. */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun GaplessTrack(state: SliderState, colors: SliderColors) =
-    SliderDefaults.Track(sliderState = state, modifier = Modifier.height(6.dp), colors = colors, thumbTrackGapSize = 0.dp, drawStopIndicator = null)
+private fun GaplessTrack(state: SliderState, colors: SliderColors) {
+    val range = state.valueRange
+    val fraction = ((state.value - range.start) / (range.endInclusive - range.start)).coerceIn(0f, 1f)
+    // Same height as the knob so both are centred on one line; the fill ends at the knob's centre.
+    Canvas(Modifier.fillMaxWidth().height(KnobSize)) {
+        val h = 6.dp.toPx()
+        val r = KnobSize.toPx() / 2
+        val top = (size.height - h) / 2
+        drawRoundRect(colors.inactiveTrackColor, Offset(0f, top), Size(size.width, h), CornerRadius(h / 2))
+        drawRoundRect(colors.activeTrackColor, Offset(0f, top), Size(r + fraction * (size.width - 2 * r), h), CornerRadius(h / 2))
+    }
+}
+
+private val KnobSize = 14.dp
+
+/** A small round knob instead of Material 3's tall bar. */
+@Composable
+private fun DotThumb(colors: SliderColors) =
+    SliderDefaults.Thumb(remember { MutableInteractionSource() }, colors = colors, thumbSize = DpSize(KnobSize, KnobSize))
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -200,7 +223,7 @@ private fun VolumeControl() {
             )
         }
         val colors = SliderDefaults.colors()
-        Slider(value = v, onValueChange = Player::setVolume, modifier = Modifier.width(110.dp).height(24.dp), colors = colors, track = { GaplessTrack(it, colors) })
+        Slider(value = v, onValueChange = Player::setVolume, modifier = Modifier.width(110.dp).height(24.dp), colors = colors, thumb = { DotThumb(colors) }, track = { GaplessTrack(it, colors) })
         Text(
             "${(v * 100).roundToInt()}%",
             style = MaterialTheme.typography.labelMedium,

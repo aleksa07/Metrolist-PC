@@ -125,6 +125,7 @@ fun main(args: Array<String>) {
             MetrolistTheme {
                 val surface = androidx.compose.material3.MaterialTheme.colorScheme.surface
                 androidx.compose.runtime.LaunchedEffect(surface) { com.metrolist.desktop.ui.TitleBar.apply(window, surface) }
+                androidx.compose.runtime.LaunchedEffect(Unit) { com.metrolist.desktop.integrations.MediaControls.start(window.windowHandle) }
                 App(appState)
             }
         }

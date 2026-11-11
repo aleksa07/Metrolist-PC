@@ -55,7 +55,8 @@
 - Stream any song or video from YouTube Music
 - Radio / autoplay queue for any song, artist or playlist
 - Seek, shuffle, repeat, queue reordering
-- Media keys, tray controls and keyboard shortcuts
+- Windows media overlay and lock screen controls, Linux MPRIS (media keys work in the background)
+- Tray controls and keyboard shortcuts
 - Close to the system tray and keep listening (optional)
 
 </td>
