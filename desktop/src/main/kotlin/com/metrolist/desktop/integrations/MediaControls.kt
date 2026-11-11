@@ -19,6 +19,7 @@ import dev.toastbits.mediasession.MediaSessionPlaybackStatus
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.launch
@@ -34,6 +35,9 @@ object MediaControls {
 
     private interface Backend {
         fun update(track: Track?, playing: Boolean)
+
+        /** Song progress for the OS widget; MPRIS pulls the position itself, so only Windows overrides this. */
+        fun progress(positionMs: Long, durationMs: Long) {}
     }
 
     fun start(hwnd: Long) {
@@ -49,6 +53,12 @@ object MediaControls {
         scope.launch {
             combine(Player.current, Player.isPlaying) { t, p -> t to p }.distinctUntilChanged().collect { (t, p) ->
                 runCatching { backend.update(t, p) }.onFailure { Timber.tag("MediaControls").w(it, "update failed") }
+            }
+        }
+        scope.launch {
+            while (true) {
+                if (Player.current.value != null) runCatching { backend.progress(Player.position.value, Player.duration.value) }
+                delay(2000)
             }
         }
     }
@@ -102,6 +112,7 @@ object MediaControls {
         @Suppress("FunctionName")
         private interface Combase : Library {
             fun RoInitialize(initType: Int): Int
+            fun RoActivateInstance(classId: Pointer, instance: PointerByReference): Int
             fun RoGetActivationFactory(classId: Pointer, iid: Pointer, factory: PointerByReference): Int
             fun WindowsCreateString(source: WString, length: Int, string: PointerByReference): Int
             fun WindowsDeleteString(string: Pointer?): Int
@@ -115,6 +126,8 @@ object MediaControls {
         private lateinit var display: Pointer
         private lateinit var uriFactory: Pointer
         private lateinit var streamRefStatics: Pointer
+        private lateinit var smtc2: Pointer
+        private lateinit var timeline: Pointer
 
         // The ButtonPressed handler is a tiny COM object; its callbacks must stay referenced while registered.
         private val handlerCallbacks = mutableListOf<Callback>()
@@ -132,6 +145,9 @@ object MediaControls {
                 uriFactory = factory("Windows.Foundation.Uri", IID_URI_FACTORY)
                 streamRefStatics = factory("Windows.Storage.Streams.RandomAccessStreamReference", IID_STREAM_REF_STATICS)
                 registerButtons()
+                smtc2 = out { call(smtc, 0, guid(IID_SMTC2), it) }
+                val props = withHString("Windows.Media.SystemMediaTransportControlsTimelineProperties") { h -> out { combase.RoActivateInstance(h, it) } }
+                timeline = out { call(props, 0, guid(IID_TIMELINE), it) }
             }.get()
         }
 
@@ -157,9 +173,7 @@ object MediaControls {
                 @Suppress("unused")
                 fun invoke(self: Pointer, sender: Pointer, args: Pointer): Int {
                     val button = IntByReference()
-                    val hr = call(args, 6, button)
-                    Timber.tag("MediaControls").d("SMTC button ${button.value} hr=$hr")
-                    if (hr == 0) {
+                    if (call(args, 6, button) == 0) {
                         when (button.value) {
                             0 -> onButton(Player::play)
                             1 -> onButton(Player::pause)
@@ -198,6 +212,18 @@ object MediaControls {
             }
         }
 
+        override fun progress(positionMs: Long, durationMs: Long) {
+            com.submit {
+                val end = durationMs * 10_000 // TimeSpan: 100 ns ticks
+                call(timeline, 7, 0L) // StartTime
+                call(timeline, 9, end) // EndTime
+                call(timeline, 11, 0L) // MinSeekTime
+                call(timeline, 13, end) // MaxSeekTime
+                call(timeline, 15, positionMs.coerceIn(0, durationMs.coerceAtLeast(0)) * 10_000) // Position
+                call(smtc2, 12, timeline) // UpdateTimelineProperties
+            }
+        }
+
         private fun factory(className: String, iid: String): Pointer =
             withHString(className) { h -> out { combase.RoGetActivationFactory(h, guid(iid), it) } }
 
@@ -226,6 +252,8 @@ object MediaControls {
         companion object {
             const val IID_INTEROP = "ddb0472d-c911-4a1f-86d9-dc3d71a95f5a"
             const val IID_SMTC = "99fa3ff4-1742-42a6-902e-087d41f965ec"
+            const val IID_SMTC2 = "ea98d2f6-7f3c-4af2-a586-72889808efb1"
+            const val IID_TIMELINE = "5125316a-c3a2-475b-8507-93534dc88f15"
             const val IID_URI_FACTORY = "44a9796f-723e-4fdf-a218-033e75b0c084"
             const val IID_STREAM_REF_STATICS = "857309dc-3fbf-4e7d-986f-ef3b1a07a964"
             private val handlerIids =

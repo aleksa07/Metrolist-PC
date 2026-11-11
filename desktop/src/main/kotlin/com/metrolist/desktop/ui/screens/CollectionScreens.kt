@@ -35,14 +35,12 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Shape
@@ -61,6 +59,7 @@ import com.metrolist.desktop.ui.Artwork
 import com.metrolist.desktop.ui.Carousel
 import com.metrolist.desktop.ui.ItemCard
 import com.metrolist.desktop.ui.LoadView
+import com.metrolist.desktop.ui.LoadMoreOnScroll
 import com.metrolist.desktop.ui.LocalNavigator
 import com.metrolist.desktop.ui.MenuEntry
 import com.metrolist.desktop.ui.MoreButton
@@ -74,8 +73,6 @@ import com.metrolist.desktop.ui.trackMenu
 import com.metrolist.innertube.YouTube
 import com.metrolist.innertube.models.PlaylistItem
 import com.metrolist.innertube.models.SongItem
-import kotlinx.coroutines.flow.distinctUntilChanged
-import kotlinx.coroutines.flow.filter
 
 val screenPadding = PaddingValues(start = 24.dp, end = 24.dp, top = 8.dp, bottom = 32.dp)
 
@@ -193,21 +190,14 @@ private fun PlaylistContent(
     val songs = remember(playlist.id) { mutableStateListOf<Track>().apply { addAll(firstSongs.map { it.toTrack() }) } }
     var continuation by remember(playlist.id) { mutableStateOf(firstContinuation) }
     val listState = rememberLazyListState()
-    LaunchedEffect(listState, playlist.id) {
-        snapshotFlow { listState.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: 0 }
-            .distinctUntilChanged()
-            .filter { it >= listState.layoutInfo.totalItemsCount - 5 }
-            .collect {
-                val c = continuation ?: return@collect
-                continuation = null
-                if (!isPodcast) {
-                    YouTube.playlistContinuation(c).onSuccess { more ->
-                        val known = songs.map { s -> s.id }.toHashSet()
-                        songs.addAll(more.songs.map { s -> s.toTrack() }.filterNot { s -> s.id in known })
-                        continuation = more.continuation
-                    }
-                }
-            }
+    LoadMoreOnScroll(listState, playlist.id) {
+        val c = continuation?.takeUnless { isPodcast } ?: return@LoadMoreOnScroll
+        continuation = null
+        YouTube.playlistContinuation(c).onSuccess { more ->
+            val known = songs.map { s -> s.id }.toHashSet()
+            songs.addAll(more.songs.map { s -> s.toTrack() }.filterNot { s -> s.id in known })
+            continuation = more.continuation
+        }
     }
     LazyColumn(state = listState, contentPadding = screenPadding) {
         item {
@@ -369,18 +359,13 @@ fun ArtistItemsScreen(screen: Screen.ArtistItems) {
         val songs = items.filterIsInstance<SongItem>()
         if (songs.size == items.size) {
             val listState = rememberLazyListState()
-            LaunchedEffect(listState, page) {
-                snapshotFlow { listState.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: 0 }
-                    .distinctUntilChanged()
-                    .filter { it >= listState.layoutInfo.totalItemsCount - 5 }
-                    .collect {
-                        val c = continuation ?: return@collect
-                        continuation = null
-                        YouTube.artistItemsContinuation(c).onSuccess { more ->
-                            items.addAll(more.items)
-                            continuation = more.continuation
-                        }
-                    }
+            LoadMoreOnScroll(listState, page) {
+                val c = continuation ?: return@LoadMoreOnScroll
+                continuation = null
+                YouTube.artistItemsContinuation(c).onSuccess { more ->
+                    items.addAll(more.items)
+                    continuation = more.continuation
+                }
             }
             val tracks = songs.map { it.toTrack() }
             LazyColumn(state = listState, contentPadding = screenPadding) {

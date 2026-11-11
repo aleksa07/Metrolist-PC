@@ -11,7 +11,6 @@ import androidx.compose.foundation.interaction.collectIsHoveredAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -68,6 +67,20 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.flow.filter
+import kotlinx.coroutines.flow.distinctUntilChanged
+import androidx.compose.runtime.snapshotFlow
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.foundation.lazy.LazyListState
+import androidx.compose.foundation.gestures.ScrollableState
+import androidx.compose.foundation.gestures.animateScrollBy
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.material3.FilledTonalIconButton
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.ui.layout.onSizeChanged
+import kotlinx.coroutines.launch
 import coil3.compose.AsyncImage
 import com.metrolist.desktop.data.Library
 import com.metrolist.desktop.data.Track
@@ -393,8 +406,34 @@ fun SectionHeader(title: String, subtitle: String? = null, onMore: (() -> Unit)?
 
 @Composable
 fun Carousel(items: List<YTItem>, nav: Navigator) {
-    LazyRow(horizontalArrangement = Arrangement.spacedBy(4.dp), contentPadding = PaddingValues(horizontal = 0.dp)) {
-        items(items, key = { it.id + it::class.simpleName }) { ItemCard(it, nav) }
+    val state = rememberLazyListState()
+    ScrollArrows(state) {
+        LazyRow(state = state, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+            items(items, key = { it.id + it::class.simpleName }) { ItemCard(it, nav) }
+        }
+    }
+}
+
+/** Left/right buttons over a horizontal list, since a mouse wheel only scrolls the page vertically. */
+@Composable
+fun ScrollArrows(state: ScrollableState, content: @Composable () -> Unit) {
+    val scope = rememberCoroutineScope()
+    var width by remember { mutableStateOf(0) }
+    Box(Modifier.onSizeChanged { width = it.width }) {
+        content()
+        for (forward in listOf(false, true)) {
+            if (if (forward) state.canScrollForward else state.canScrollBackward) {
+                FilledTonalIconButton(
+                    onClick = { scope.launch { state.animateScrollBy(width * if (forward) 0.8f else -0.8f) } },
+                    modifier = Modifier.align(if (forward) Alignment.CenterEnd else Alignment.CenterStart).padding(horizontal = 4.dp),
+                ) {
+                    Icon(
+                        if (forward) Icons.AutoMirrored.Filled.KeyboardArrowRight else Icons.AutoMirrored.Filled.KeyboardArrowLeft,
+                        if (forward) "Scroll right" else "Scroll left",
+                    )
+                }
+            }
+        }
     }
 }
 
@@ -420,5 +459,16 @@ fun <T> LoadView(loader: Loader<T>, content: @Composable (T) -> Unit) {
         is Load.Loading -> CenteredLoading()
         is Load.Err -> ErrorView(s.message, loader.reload)
         is Load.Ok -> content(s.value)
+    }
+}
+
+/** Runs [loadMore] each time the list is scrolled to within a few items of its end (one call at a time). */
+@Composable
+fun LoadMoreOnScroll(state: LazyListState, key: Any?, loadMore: suspend () -> Unit) {
+    LaunchedEffect(state, key) {
+        snapshotFlow { state.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: 0 }
+            .distinctUntilChanged()
+            .filter { it >= state.layoutInfo.totalItemsCount - 5 }
+            .collect { loadMore() }
     }
 }

@@ -25,14 +25,11 @@ import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
-import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -47,6 +44,11 @@ import com.metrolist.desktop.ui.Carousel
 import com.metrolist.desktop.ui.ItemCard
 import com.metrolist.desktop.ui.ItemRow
 import com.metrolist.desktop.ui.LoadView
+import com.metrolist.innertube.models.Album
+import com.metrolist.innertube.models.Artist
+import androidx.compose.foundation.lazy.grid.rememberLazyGridState
+import com.metrolist.desktop.ui.ScrollArrows
+import com.metrolist.desktop.ui.LoadMoreOnScroll
 import com.metrolist.desktop.ui.LocalNavigator
 import com.metrolist.desktop.ui.Screen
 import com.metrolist.desktop.ui.SectionHeader
@@ -56,9 +58,6 @@ import com.metrolist.desktop.ui.trackMenu
 import com.metrolist.innertube.YouTube
 import com.metrolist.innertube.models.SongItem
 import com.metrolist.innertube.pages.HomePage
-import kotlinx.coroutines.flow.distinctUntilChanged
-import kotlinx.coroutines.flow.filter
-import kotlinx.coroutines.launch
 
 private val contentPadding = PaddingValues(start = 24.dp, end = 24.dp, top = 8.dp, bottom = 32.dp)
 
@@ -70,25 +69,14 @@ fun HomeScreen() {
     LoadView(loader) { page ->
         val sections = remember(page) { mutableStateListOf<HomePage.Section>().apply { addAll(page.sections) } }
         var continuation by remember(page) { mutableStateOf(page.continuation) }
-        var loadingMore by remember(page) { mutableStateOf(false) }
         val listState = rememberLazyListState()
-        val scope = rememberCoroutineScope()
-        LaunchedEffect(listState, page) {
-            snapshotFlow { listState.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: 0 }
-                .distinctUntilChanged()
-                .filter { it >= listState.layoutInfo.totalItemsCount - 2 }
-                .collect {
-                    val c = continuation ?: return@collect
-                    if (loadingMore) return@collect
-                    loadingMore = true
-                    scope.launch {
-                        YouTube.home(continuation = c).onSuccess { more ->
-                            sections.addAll(more.sections)
-                            continuation = more.continuation
-                        }.onFailure { continuation = null }
-                        loadingMore = false
-                    }
-                }
+        LoadMoreOnScroll(listState, page) {
+            val c = continuation ?: return@LoadMoreOnScroll
+            continuation = null
+            YouTube.home(continuation = c).onSuccess { more ->
+                sections.addAll(more.sections)
+                continuation = more.continuation
+            }
         }
         val history = Library.state.value.history
         LazyColumn(state = listState, contentPadding = contentPadding) {
@@ -104,15 +92,13 @@ fun HomeScreen() {
             if (chip == null && history.isNotEmpty()) {
                 item { SectionHeader("Listen again", "Recently played") }
                 item {
-                    LazyRow(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                        items(history.take(20), key = { it.track.id }) { h ->
+                    Carousel(
+                        history.take(20).map { h ->
                             val t = h.track
-                            ItemCard(
-                                SongItem(id = t.id, title = t.title, artists = t.artists.map { com.metrolist.innertube.models.Artist(it.name, it.id) }, thumbnail = t.thumbnail.orEmpty(), duration = t.durationSec, explicit = t.explicit, album = t.album?.let { com.metrolist.innertube.models.Album(it.name, it.id) }),
-                                nav,
-                            )
-                        }
-                    }
+                            SongItem(id = t.id, title = t.title, artists = t.artists.map { Artist(it.name, it.id) }, thumbnail = t.thumbnail.orEmpty(), duration = t.durationSec, explicit = t.explicit, album = t.album?.let { Album(it.name, it.id) })
+                        },
+                        nav,
+                    )
                 }
             }
             items(sections.size) { i ->
@@ -132,14 +118,18 @@ fun HomeScreen() {
 @Composable
 private fun QuickPicks(songs: List<SongItem>) {
     val nav = LocalNavigator.current
-    LazyHorizontalGrid(GridCells.Fixed(4), modifier = Modifier.height(62.dp * 4)) {
-        items(songs, key = { it.id }) { s ->
-            val t = s.toTrack()
-            Box(Modifier.width(400.dp)) {
-                TrackRow(t, onClick = { Player.playSong(t, s.endpoint) }, menu = { trackMenu(nav, t) })
+    val state = rememberLazyGridState()
+    ScrollArrows(state) {
+        LazyHorizontalGrid(GridCells.Fixed(4), state = state, modifier = Modifier.height(62.dp * 4)) {
+            items(songs, key = { it.id }) { s ->
+                val t = s.toTrack()
+                Box(Modifier.width(400.dp)) {
+                    TrackRow(t, onClick = { Player.playSong(t, s.endpoint) }, menu = { trackMenu(nav, t) })
+                }
             }
         }
     }
+
 }
 
 @Composable

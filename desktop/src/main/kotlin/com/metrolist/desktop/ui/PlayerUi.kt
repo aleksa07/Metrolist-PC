@@ -83,7 +83,6 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.geometry.Offset
@@ -132,7 +131,7 @@ private fun SeekBar(modifier: Modifier = Modifier, light: Boolean = false) {
             },
             modifier = Modifier.weight(1f).padding(horizontal = 8.dp).height(24.dp),
             colors = colors,
-            thumb = { DotThumb(colors) },
+            thumb = { DotThumb() },
             track = { GaplessTrack(it, colors) },
         )
         Text(if (duration > 0) formatDuration(duration / 1000) else "--:--", style = MaterialTheme.typography.labelMedium, color = textColor, modifier = Modifier.width(48.dp))
@@ -187,16 +186,18 @@ private fun GaplessTrack(state: SliderState, colors: SliderColors) {
         val r = KnobSize.toPx() / 2
         val top = (size.height - h) / 2
         drawRoundRect(colors.inactiveTrackColor, Offset(0f, top), Size(size.width, h), CornerRadius(h / 2))
-        drawRoundRect(colors.activeTrackColor, Offset(0f, top), Size(r + fraction * (size.width - 2 * r), h), CornerRadius(h / 2))
+        val x = r + fraction * (size.width - 2 * r)
+        drawRoundRect(colors.activeTrackColor, Offset(0f, top), Size(x, h), CornerRadius(h / 2))
+        // The knob is drawn here, on the track's own centre line, so the two can never be misaligned.
+        drawCircle(colors.thumbColor, r, Offset(x, size.height / 2))
     }
 }
 
 private val KnobSize = 14.dp
 
-/** A small round knob instead of Material 3's tall bar. */
+/** Invisible drag handle; the visible knob is drawn by [GaplessTrack]. */
 @Composable
-private fun DotThumb(colors: SliderColors) =
-    SliderDefaults.Thumb(remember { MutableInteractionSource() }, colors = colors, thumbSize = DpSize(KnobSize, KnobSize))
+private fun DotThumb() = Spacer(Modifier.size(KnobSize))
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -223,7 +224,7 @@ private fun VolumeControl() {
             )
         }
         val colors = SliderDefaults.colors()
-        Slider(value = v, onValueChange = Player::setVolume, modifier = Modifier.width(110.dp).height(24.dp), colors = colors, thumb = { DotThumb(colors) }, track = { GaplessTrack(it, colors) })
+        Slider(value = v, onValueChange = Player::setVolume, modifier = Modifier.width(110.dp).height(24.dp), colors = colors, thumb = { DotThumb() }, track = { GaplessTrack(it, colors) })
         Text(
             "${(v * 100).roundToInt()}%",
             style = MaterialTheme.typography.labelMedium,

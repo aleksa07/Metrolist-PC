@@ -38,7 +38,6 @@ import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -61,6 +60,7 @@ import com.metrolist.desktop.ui.Artwork
 import com.metrolist.desktop.ui.Actions
 import com.metrolist.desktop.ui.ItemRow
 import com.metrolist.desktop.ui.LoadView
+import com.metrolist.desktop.ui.LoadMoreOnScroll
 import com.metrolist.desktop.ui.LocalNavigator
 import com.metrolist.desktop.ui.Screen
 import com.metrolist.desktop.ui.SectionHeader
@@ -70,7 +70,6 @@ import com.metrolist.innertube.YouTube
 import com.metrolist.innertube.models.SearchSuggestions
 import com.metrolist.innertube.models.YTItem
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.filter
 
 private val filters =
@@ -231,19 +230,14 @@ fun SearchScreen(screen: Screen.Search) {
                 val items = remember(first) { mutableStateListOf<YTItem>().apply { addAll(first.items) } }
                 var continuation by remember(first) { mutableStateOf(first.continuation) }
                 val listState = rememberLazyListState()
-                LaunchedEffect(listState, first) {
-                    snapshotFlow { listState.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: 0 }
-                        .distinctUntilChanged()
-                        .filter { it >= listState.layoutInfo.totalItemsCount - 5 }
-                        .collect {
-                            val c = continuation ?: return@collect
-                            continuation = null
-                            YouTube.searchContinuation(c).onSuccess { more ->
-                                val known = items.map { i -> i.id }.toHashSet()
-                                items.addAll(more.items.filterNot { i -> i.id in known })
-                                continuation = more.continuation
-                            }
-                        }
+                LoadMoreOnScroll(listState, first) {
+                    val c = continuation ?: return@LoadMoreOnScroll
+                    continuation = null
+                    YouTube.searchContinuation(c).onSuccess { more ->
+                        val known = items.map { i -> i.id }.toHashSet()
+                        items.addAll(more.items.filterNot { i -> i.id in known })
+                        continuation = more.continuation
+                    }
                 }
                 LazyColumn(state = listState, contentPadding = screenPadding) {
                     if (items.isEmpty()) item { Text("No results", Modifier.padding(24.dp)) }
