@@ -54,6 +54,9 @@ import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
+import androidx.compose.material3.SliderColors
+import androidx.compose.material3.SliderState
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Tab
 import androidx.compose.material3.TabRow
@@ -92,7 +95,9 @@ import com.metrolist.desktop.data.formatDuration
 import com.metrolist.desktop.data.resized
 import com.metrolist.desktop.playback.Player
 import com.metrolist.desktop.playback.RepeatMode
+import kotlin.math.roundToInt
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun SeekBar(modifier: Modifier = Modifier, light: Boolean = false) {
     val position by Player.position.collectAsState()
@@ -102,6 +107,12 @@ private fun SeekBar(modifier: Modifier = Modifier, light: Boolean = false) {
     val total = duration.coerceAtLeast(1)
     val shown = if (dragging) dragValue else (position.toFloat() / total).coerceIn(0f, 1f)
     val textColor = if (light) Color.White.copy(alpha = 0.8f) else MaterialTheme.colorScheme.onSurfaceVariant
+    val colors =
+        if (light) {
+            SliderDefaults.colors(thumbColor = Color.White, activeTrackColor = Color.White, inactiveTrackColor = Color.White.copy(alpha = 0.25f))
+        } else {
+            SliderDefaults.colors()
+        }
     Row(modifier, verticalAlignment = Alignment.CenterVertically) {
         Text(formatDuration(((if (dragging) dragValue * total else position.toFloat()) / 1000).toLong()), style = MaterialTheme.typography.labelMedium, color = textColor, modifier = Modifier.width(48.dp), textAlign = TextAlign.End)
         Slider(
@@ -115,12 +126,8 @@ private fun SeekBar(modifier: Modifier = Modifier, light: Boolean = false) {
                 dragging = false
             },
             modifier = Modifier.weight(1f).padding(horizontal = 8.dp).height(24.dp),
-            colors =
-                if (light) {
-                    SliderDefaults.colors(thumbColor = Color.White, activeTrackColor = Color.White, inactiveTrackColor = Color.White.copy(alpha = 0.25f))
-                } else {
-                    SliderDefaults.colors()
-                },
+            colors = colors,
+            track = { GaplessTrack(it, colors) },
         )
         Text(if (duration > 0) formatDuration(duration / 1000) else "--:--", style = MaterialTheme.typography.labelMedium, color = textColor, modifier = Modifier.width(48.dp))
     }
@@ -162,6 +169,13 @@ private fun TransportButtons(big: Boolean = false, light: Boolean = false) {
     }
 }
 
+/** Track without the gap Material 3 leaves around the thumb, which hid the filled part at low values. */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun GaplessTrack(state: SliderState, colors: SliderColors) =
+    SliderDefaults.Track(sliderState = state, modifier = Modifier.height(6.dp), colors = colors, thumbTrackGapSize = 0.dp, drawStopIndicator = null)
+
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun VolumeControl() {
     val settings by Settings.state.collectAsState()
@@ -185,7 +199,17 @@ private fun VolumeControl() {
                 "Volume",
             )
         }
-        Slider(value = v, onValueChange = Player::setVolume, modifier = Modifier.width(110.dp).height(24.dp))
+        val colors = SliderDefaults.colors()
+        Slider(value = v, onValueChange = Player::setVolume, modifier = Modifier.width(110.dp).height(24.dp), colors = colors, track = { GaplessTrack(it, colors) })
+        Text(
+            "${(v * 100).roundToInt()}%",
+            style = MaterialTheme.typography.labelMedium,
+            maxLines = 1,
+            softWrap = false,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            textAlign = TextAlign.End,
+            modifier = Modifier.width(40.dp),
+        )
     }
 }
 
@@ -233,7 +257,8 @@ fun PlayerBar(nav: Navigator) {
                 TransportButtons()
                 SeekBar(Modifier.fillMaxWidth())
             }
-            Row(Modifier.weight(1f), horizontalArrangement = Arrangement.End, verticalAlignment = Alignment.CenterVertically) {
+            // Not weighted: the volume controls keep their full width and the seek bar absorbs a narrow window.
+            Row(Modifier.padding(start = 12.dp), verticalAlignment = Alignment.CenterVertically) {
                 IconButton(onClick = { Ui.expandedPlayer = true }) { Icon(Icons.Default.Lyrics, "Lyrics") }
                 IconButton(onClick = { Settings.update { it.copy(showQueuePanel = !it.showQueuePanel) } }) {
                     Icon(Icons.AutoMirrored.Filled.QueueMusic, "Queue", tint = if (settings.showQueuePanel) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface)

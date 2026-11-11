@@ -62,7 +62,7 @@ fun main(args: Array<String>) {
         val current by Player.current.collectAsState()
         val playing by Player.isPlaying.collectAsState()
         val icon = painterResource("icon.png")
-        var visible by androidx.compose.runtime.mutableStateOf(true)
+        var visible by remember { androidx.compose.runtime.mutableStateOf(true) }
         fun show() {
             visible = true
             windowState.isMinimized = false
