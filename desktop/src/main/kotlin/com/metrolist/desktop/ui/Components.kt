@@ -1,5 +1,7 @@
 package com.metrolist.desktop.ui
 
+import androidx.compose.material.icons.filled.DownloadDone
+import androidx.compose.material.icons.filled.Download
 import androidx.compose.foundation.ContextMenuArea
 import androidx.compose.foundation.ContextMenuItem
 import androidx.compose.foundation.ExperimentalFoundationApi
@@ -156,6 +158,11 @@ fun trackMenu(
         val liked = Library.isLiked(track.id)
         add(MenuEntry(if (liked) "Remove from liked songs" else "Like", if (liked) Icons.Default.Favorite else Icons.Default.FavoriteBorder) { Actions.toggleLike(track) })
         add(MenuEntry("Add to playlist…", Icons.AutoMirrored.Filled.PlaylistAdd) { Ui.addToPlaylist = listOf(track) })
+        if (Library.value.downloads.any { it.track.id == track.id }) {
+            add(MenuEntry("Remove download", Icons.Default.DownloadDone) { com.metrolist.desktop.data.Downloads.remove(track.id); Ui.toast("Download removed") })
+        } else {
+            add(MenuEntry("Download", Icons.Default.Download) { Actions.download(listOf(track)) })
+        }
         track.album?.let { a -> add(MenuEntry("Go to album", Icons.Default.Album) { nav.push(Screen.Album(a.id)) }) }
         track.artists.filter { it.id != null }.take(3).forEach { a ->
             add(MenuEntry("Go to ${a.name}", Icons.Default.Person) { nav.push(Screen.Artist(a.id!!)) })
@@ -179,6 +186,7 @@ fun itemMenu(nav: Navigator, item: YTItem): List<MenuEntry> =
                     add(MenuEntry("Play next", Icons.AutoMirrored.Filled.PlaylistPlay) { Actions.enqueue(item, next = true) })
                     add(MenuEntry("Add to queue", Icons.AutoMirrored.Filled.QueueMusic) { Actions.enqueue(item, next = false) })
                     add(MenuEntry("Add to playlist…", Icons.AutoMirrored.Filled.PlaylistAdd) { Actions.addToPlaylist(item) })
+                    add(MenuEntry("Download", Icons.Default.Download) { Actions.download(item) })
                 }
                 item.toSaved()?.let { saved ->
                     val isSaved = Library.isSaved(saved.id)
@@ -272,6 +280,10 @@ fun TrackRow(
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     if (track.explicit) {
                         Icon(Icons.Default.Explicit, "Explicit", Modifier.size(16.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Spacer(Modifier.width(4.dp))
+                    }
+                    if (lib.downloads.any { it.track.id == track.id }) {
+                        Icon(Icons.Default.DownloadDone, "Downloaded", Modifier.size(16.dp), tint = MaterialTheme.colorScheme.primary)
                         Spacer(Modifier.width(4.dp))
                     }
                     Text(

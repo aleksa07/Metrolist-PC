@@ -1,5 +1,9 @@
 package com.metrolist.desktop.ui
 
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material.icons.filled.PictureInPictureAlt
+import androidx.compose.material.icons.filled.Bedtime
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
@@ -251,6 +255,43 @@ fun LikeButton(track: Track, light: Boolean = false) {
 }
 
 @Composable
+private fun SleepTimerButton() {
+    val endsAt by Player.sleepEndsAt.collectAsState()
+    val atEnd by Player.sleepAtEnd.collectAsState()
+    var open by remember { mutableStateOf(false) }
+    Box {
+        IconButton(onClick = { open = true }) {
+            Icon(Icons.Default.Bedtime, "Sleep timer", tint = if (endsAt != null || atEnd) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface)
+        }
+        DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+            endsAt?.let { DropdownMenuItem(text = { Text("Pauses in ${(it - System.currentTimeMillis()) / 60_000 + 1} min") }, enabled = false, onClick = {}) }
+            if (atEnd) DropdownMenuItem(text = { Text("Pauses after this song") }, enabled = false, onClick = {})
+            listOf("Off" to null, "15 minutes" to 15, "30 minutes" to 30, "45 minutes" to 45, "1 hour" to 60, "End of this song" to 0).forEach { (label, minutes) ->
+                DropdownMenuItem(text = { Text(label) }, onClick = { open = false; Player.setSleepTimer(minutes) })
+            }
+        }
+    }
+}
+
+/** Content of the small always-on-top window. */
+@Composable
+fun MiniPlayer() {
+    val track by Player.current.collectAsState()
+    Surface(color = MaterialTheme.colorScheme.surfaceContainer, modifier = Modifier.fillMaxSize()) {
+        Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+            Artwork(track?.thumbnail, 96.dp)
+            Spacer(Modifier.width(12.dp))
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Text(track?.title ?: "Nothing playing", maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.titleSmall)
+                Text(track?.artistText.orEmpty(), maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                TransportButtons()
+                SeekBar(Modifier.fillMaxWidth())
+            }
+        }
+    }
+}
+
+@Composable
 fun PlayerBar(nav: Navigator) {
     val track by Player.current.collectAsState()
     val settings by Settings.state.collectAsState()
@@ -283,6 +324,8 @@ fun PlayerBar(nav: Navigator) {
             }
             // Not weighted: the volume controls keep their full width and the seek bar absorbs a narrow window.
             Row(Modifier.padding(start = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+                SleepTimerButton()
+                IconButton(onClick = { Ui.miniPlayer = true }) { Icon(Icons.Default.PictureInPictureAlt, "Mini player") }
                 IconButton(onClick = { Ui.expandedPlayer = true }) { Icon(Icons.Default.Lyrics, "Lyrics") }
                 IconButton(onClick = { Settings.update { it.copy(showQueuePanel = !it.showQueuePanel) } }) {
                     Icon(Icons.AutoMirrored.Filled.QueueMusic, "Queue", tint = if (settings.showQueuePanel) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface)

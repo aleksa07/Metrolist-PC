@@ -23,7 +23,7 @@ import java.nio.file.Files
 import java.nio.file.StandardCopyOption
 import java.util.UUID
 
-private val storeJson =
+internal val storeJson =
     Json {
         ignoreUnknownKeys = true
         encodeDefaults = true
@@ -120,9 +120,18 @@ data class AppSettings(
     val discordListenButton: Boolean = true,
     val discordProjectButton: Boolean = true,
     val discordShowPaused: Boolean = false,
+    /** Java Sound device name; blank = system default. */
+    val outputDevice: String = "",
+    /** Gain in dB for each of Equalizer.FREQS. */
+    val eqGains: List<Float> = listOf(0f, 0f, 0f, 0f, 0f),
+    val macMediaControls: Boolean = false,
 )
 
 object Settings : JsonStore<AppSettings>("settings.json", AppSettings.serializer(), { AppSettings() })
+
+/** A song saved to disk; the loudness is kept so volume normalisation still works offline. */
+@Serializable
+data class DownloadedTrack(val track: Track, val loudnessDb: Double? = null)
 
 @Serializable
 data class LibraryData(
@@ -135,6 +144,7 @@ data class LibraryData(
     val likedSnapshot: List<String> = emptyList(),
     /** Like (true) / unlike (false) changes not yet confirmed by the account; re-sent at the next sync. */
     val pendingLikes: Map<String, Boolean> = emptyMap(),
+    val downloads: List<DownloadedTrack> = emptyList(),
 )
 
 object Library : JsonStore<LibraryData>("library.json", LibraryData.serializer(), { LibraryData() }) {

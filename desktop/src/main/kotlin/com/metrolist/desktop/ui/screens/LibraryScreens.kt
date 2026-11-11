@@ -1,5 +1,6 @@
 package com.metrolist.desktop.ui.screens
 
+import androidx.compose.material.icons.filled.Download
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -65,7 +66,7 @@ import com.metrolist.desktop.ui.trackMenu
 import java.text.DateFormat
 import java.util.Date
 
-private val tabs = listOf("Songs", "Playlists", "Albums", "Artists", "History", "YouTube Music")
+private val tabs = listOf("Songs", "Playlists", "Albums", "Artists", "History", "Downloads", "YouTube Music")
 
 @Composable
 fun LibraryScreen() {
@@ -90,6 +91,7 @@ fun LibraryScreen() {
                         Row(Modifier.padding(8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                             Icon(Icons.Default.Favorite, null, tint = MaterialTheme.colorScheme.primary)
                             Text("Liked songs • ${liked.size}", style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
+                            if (liked.isNotEmpty()) OutlinedButton(onClick = { com.metrolist.desktop.ui.Actions.download(liked) }) { Text("Download all") }
                             if (liked.isNotEmpty()) PlayShuffleButtons({ Player.playQueue(liked, 0, "Liked songs") }, { Player.playQueue(liked, 0, "Liked songs", shuffle = true) })
                         }
                     }
@@ -137,6 +139,28 @@ fun LibraryScreen() {
                             }
                             TrackRow(h.track, onClick = { Player.playSong(h.track) }, menu = { trackMenu(nav, h.track) })
                         }
+                    }
+                }
+            }
+            "Downloads" -> {
+                val tracks = lib.downloads.map { it.track }.reversed()
+                val active by com.metrolist.desktop.data.Downloads.active.collectAsState()
+                LazyColumn(contentPadding = screenPadding) {
+                    item {
+                        Row(Modifier.padding(8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Default.Download, null)
+                            Text(
+                                "Downloaded • ${tracks.size} songs • ${com.metrolist.desktop.data.Downloads.sizeBytes() / 1_048_576} MB" +
+                                    if (active.isNotEmpty()) " • ${active.size} downloading" else "",
+                                style = MaterialTheme.typography.titleMedium,
+                                modifier = Modifier.weight(1f),
+                            )
+                            if (tracks.isNotEmpty()) PlayShuffleButtons({ Player.playQueue(tracks, 0, "Downloads") }, { Player.playQueue(tracks, 0, "Downloads", shuffle = true) })
+                        }
+                    }
+                    if (tracks.isEmpty()) item { Empty("Downloaded songs play without internet. Use Download in any song's menu.") }
+                    itemsIndexed(tracks, key = { _, t -> t.id }) { i, t ->
+                        TrackRow(t, onClick = { Player.playQueue(tracks, i, "Downloads") }, menu = { trackMenu(nav, t) })
                     }
                 }
             }

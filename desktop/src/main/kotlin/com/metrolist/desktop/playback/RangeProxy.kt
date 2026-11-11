@@ -47,7 +47,6 @@ object RangeProxy {
         val id = UUID.randomUUID().toString()
         val entry = Entry(stream, stream.contentLength?.takeIf { it > 0 })
         entries[id] = entry
-        if (entries.size > 8) entries.keys.take(entries.size - 8).forEach(entries::remove)
         return "http://127.0.0.1:${server.address.port}/s/$id" to entry
     }
 

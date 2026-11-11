@@ -32,6 +32,7 @@ object Ui {
 
     var addToPlaylist by mutableStateOf<List<Track>?>(null)
     var expandedPlayer by mutableStateOf(false)
+    var miniPlayer by mutableStateOf(false)
 
     fun toast(message: String) {
         messages.trySend(message)
@@ -105,6 +106,24 @@ object Actions {
         Ui.scope.launch {
             val tracks = tracksOf(item)
             if (tracks.isNotEmpty()) Ui.addToPlaylist = tracks
+        }
+    }
+
+    fun download(tracks: List<Track>) {
+        val started = com.metrolist.desktop.data.Downloads.download(tracks)
+        Ui.toast(
+            when (started) {
+                0 -> "Already downloaded"
+                1 -> "Downloading…"
+                else -> "Downloading $started songs…"
+            },
+        )
+    }
+
+    fun download(item: YTItem) {
+        Ui.scope.launch {
+            val tracks = tracksOf(item)
+            if (tracks.isEmpty()) Ui.toast("Nothing to download") else download(tracks)
         }
     }
 

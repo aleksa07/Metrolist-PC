@@ -1,5 +1,7 @@
 package com.metrolist.desktop.integrations
 
+import com.sun.jna.ptr.LongByReference
+import com.sun.jna.NativeLibrary
 import com.metrolist.desktop.data.Track
 import com.metrolist.desktop.data.resized
 import com.metrolist.desktop.playback.Player
@@ -47,7 +49,8 @@ object MediaControls {
                 when {
                     os.startsWith("windows") -> WindowsSmtc(hwnd)
                     os.contains("linux") -> LinuxMpris()
-                    else -> null // shortcut: macOS Now Playing needs an Objective-C bridge; add when it can be tested on a Mac.
+                    os.contains("mac") && com.metrolist.desktop.data.Settings.value.macMediaControls -> MacNowPlaying()
+                    else -> null
                 }
             }.onFailure { Timber.tag("MediaControls").w(it, "media controls unavailable") }.getOrNull() ?: return
         scope.launch {
@@ -105,6 +108,88 @@ object MediaControls {
     }
 
     /**
+     * macOS: Now Playing and media keys through the Objective-C runtime (MediaPlayer framework).
+     * Opt-in from settings: it has not run on a real Mac yet, and native mistakes can't be caught.
+     */
+    private class MacNowPlaying : Backend {
+        private val objc = NativeLibrary.getInstance("objc")
+        private val mediaPlayer = NativeLibrary.getInstance("/System/Library/Frameworks/MediaPlayer.framework/MediaPlayer")
+        private val send = objc.getFunction("objc_msgSend")
+        private val refs = mutableListOf<Any>() // blocks and their callbacks must outlive the registration
+        private val center = msg(cls("MPNowPlayingInfoCenter"), "defaultCenter")!!
+        private var track: Track? = null
+        private var playing = false
+
+        private fun cls(name: String) = objc.getFunction("objc_getClass").invokePointer(arrayOf(name))
+        private fun msg(target: Pointer, selector: String, vararg args: Any?): Pointer? =
+            send.invokePointer(arrayOf(target, objc.getFunction("sel_registerName").invokePointer(arrayOf(selector)), *args))
+        private fun str(s: String) = msg(cls("NSString"), "stringWithUTF8String:", s)!!
+        private fun num(d: Double) = msg(cls("NSNumber"), "numberWithDouble:", d)!!
+
+        init {
+            val commands = msg(cls("MPRemoteCommandCenter"), "sharedCommandCenter")!!
+            mapOf<String, () -> Unit>(
+                "playCommand" to Player::play,
+                "pauseCommand" to Player::pause,
+                "togglePlayPauseCommand" to Player::togglePlay,
+                "nextTrackCommand" to Player::next,
+                "previousTrackCommand" to Player::previous,
+            ).forEach { (name, action) -> msg(msg(commands, name)!!, "addTargetWithHandler:", block { onButton(action) }) }
+        }
+
+        /** An Objective-C global block (never copied or freed) whose body runs [action] and reports success. */
+        private fun block(action: () -> Unit): Pointer {
+            val invoke = object : Callback {
+                @Suppress("unused")
+                fun invoke(block: Pointer, event: Pointer): Long {
+                    action()
+                    return 0 // MPRemoteCommandHandlerStatusSuccess
+                }
+            }
+            val descriptor = Memory(16).apply { setLong(0, 0); setLong(8, 32) }
+            val block = Memory(32).apply {
+                setPointer(0, NativeLibrary.getProcess().getGlobalVariableAddress("_NSConcreteGlobalBlock"))
+                setInt(8, 1 shl 28) // BLOCK_IS_GLOBAL
+                setInt(12, 0)
+                setPointer(16, CallbackReference.getFunctionPointer(invoke))
+                setPointer(24, descriptor)
+            }
+            refs.addAll(listOf(invoke, descriptor, block))
+            return block
+        }
+
+        override fun update(track: Track?, playing: Boolean) {
+            this.track = track
+            this.playing = playing
+            progress(Player.position.value, Player.duration.value)
+        }
+
+        override fun progress(positionMs: Long, durationMs: Long) {
+            // These calls come from the Swing thread, which has no autorelease pool of its own.
+            val pool = objc.getFunction("objc_autoreleasePoolPush").invokePointer(arrayOf())
+            try {
+                val t = track
+                if (t == null) {
+                    msg(center, "setNowPlayingInfo:", null)
+                    return
+                }
+                val info = msg(cls("NSMutableDictionary"), "dictionary")!!
+                fun put(key: String, value: Pointer) = msg(info, "setObject:forKey:", value, mediaPlayer.getGlobalVariableAddress(key).getPointer(0))
+                put("MPMediaItemPropertyTitle", str(t.title))
+                put("MPMediaItemPropertyArtist", str(t.artistText))
+                t.album?.name?.let { put("MPMediaItemPropertyAlbumTitle", str(it)) }
+                put("MPMediaItemPropertyPlaybackDuration", num(durationMs / 1000.0))
+                put("MPNowPlayingInfoPropertyElapsedPlaybackTime", num(positionMs / 1000.0))
+                put("MPNowPlayingInfoPropertyPlaybackRate", num(if (playing) 1.0 else 0.0))
+                msg(center, "setNowPlayingInfo:", info)
+                msg(center, "setPlaybackState:", if (playing) 1L else 2L) // playing / paused
+            } finally {
+                objc.getFunction("objc_autoreleasePoolPop").invokeVoid(arrayOf(pool))
+            }
+        }
+    }
+
+    /**
      * Windows: SystemMediaTransportControls through WinRT's COM ABI. Method slots and IIDs come from
      * the Windows SDK headers (windows.media.h, systemmediatransportcontrolsinterop.h).
      */
@@ -129,10 +214,8 @@ object MediaControls {
         private lateinit var smtc2: Pointer
         private lateinit var timeline: Pointer
 
-        // The ButtonPressed handler is a tiny COM object; its callbacks must stay referenced while registered.
-        private val handlerCallbacks = mutableListOf<Callback>()
-        private val handler = Memory(Native.POINTER_SIZE.toLong())
-        private val handlerVtable = Memory(4L * Native.POINTER_SIZE)
+        // Event handlers are tiny hand-built COM objects; everything they point to must stay referenced.
+        private val handlerRefs = mutableListOf<Any>()
 
         init {
             com.submit {
@@ -144,20 +227,41 @@ object MediaControls {
                 check(call(display, 7, 1), "set music type") // MediaPlaybackType_Music
                 uriFactory = factory("Windows.Foundation.Uri", IID_URI_FACTORY)
                 streamRefStatics = factory("Windows.Storage.Streams.RandomAccessStreamReference", IID_STREAM_REF_STATICS)
-                registerButtons()
+                val buttons =
+                    eventHandler(IID_BUTTON_HANDLER) { args ->
+                        val button = IntByReference()
+                        if (call(args, 6, button) == 0) {
+                            when (button.value) {
+                                0 -> onButton(Player::play)
+                                1 -> onButton(Player::pause)
+                                6 -> onButton(Player::next)
+                                7 -> onButton(Player::previous)
+                            }
+                        }
+                    }
+                check(call(smtc, 32, buttons, Memory(8)), "register buttons") // add_ButtonPressed
                 smtc2 = out { call(smtc, 0, guid(IID_SMTC2), it) }
+                // Dragging the progress bar in the Windows overlay; not checked, so older builds simply go without.
+                val seek =
+                    eventHandler(IID_SEEK_HANDLER) { args ->
+                        val position = LongByReference()
+                        if (call(args, 6, position) == 0) onButton { Player.seekTo(position.value / 10_000) } // get_RequestedPlaybackPosition
+                    }
+                call(smtc2, 13, seek, Memory(8)) // add_PlaybackPositionChangeRequested
                 val props = withHString("Windows.Media.SystemMediaTransportControlsTimelineProperties") { h -> out { combase.RoActivateInstance(h, it) } }
                 timeline = out { call(props, 0, guid(IID_TIMELINE), it) }
             }.get()
         }
 
-        private fun registerButtons() {
+        /** Builds a COM object implementing the TypedEventHandler with interface id [iid]. */
+        private fun eventHandler(iid: String, onEvent: (args: Pointer) -> Unit): Memory {
+            // Only IUnknown, IAgileObject (callbacks may arrive on any thread) and the handler itself; anything else is E_NOINTERFACE.
+            val accepted = listOf("00000000-0000-0000-c000-000000000046", "94ea2b94-e9cc-49e0-c0ff-ee64ca8f5b90", iid).map { guid(it).getByteArray(0, 16) }
             val qi = object : Callback {
                 @Suppress("unused")
                 fun invoke(self: Pointer, riid: Pointer, out: Pointer): Int {
-                    // Only IUnknown, IAgileObject and the ButtonPressed handler interface; anything else is E_NOINTERFACE.
                     val requested = riid.getByteArray(0, 16)
-                    if (handlerIids.none { it.contentEquals(requested) }) {
+                    if (accepted.none { it.contentEquals(requested) }) {
                         out.setPointer(0, null)
                         return 0x80004002.toInt()
                     }
@@ -172,24 +276,17 @@ object MediaControls {
             val invoke = object : Callback {
                 @Suppress("unused")
                 fun invoke(self: Pointer, sender: Pointer, args: Pointer): Int {
-                    val button = IntByReference()
-                    if (call(args, 6, button) == 0) {
-                        when (button.value) {
-                            0 -> onButton(Player::play)
-                            1 -> onButton(Player::pause)
-                            6 -> onButton(Player::next)
-                            7 -> onButton(Player::previous)
-                        }
-                    }
+                    onEvent(args)
                     return 0
                 }
             }
-            handlerCallbacks += listOf(qi, refCount, invoke)
+            val vtable = Memory(4L * Native.POINTER_SIZE)
             listOf(qi, refCount, refCount, invoke).forEachIndexed { i, cb ->
-                handlerVtable.setPointer(i.toLong() * Native.POINTER_SIZE, CallbackReference.getFunctionPointer(cb))
+                vtable.setPointer(i.toLong() * Native.POINTER_SIZE, CallbackReference.getFunctionPointer(cb))
             }
-            handler.setPointer(0, handlerVtable)
-            check(call(smtc, 32, handler, Memory(8)), "register buttons") // add_ButtonPressed
+            val handler = Memory(Native.POINTER_SIZE.toLong()).apply { setPointer(0, vtable) }
+            handlerRefs.addAll(listOf(qi, refCount, invoke, vtable, handler))
+            return handler
         }
 
         override fun update(track: Track?, playing: Boolean) {
@@ -256,12 +353,8 @@ object MediaControls {
             const val IID_TIMELINE = "5125316a-c3a2-475b-8507-93534dc88f15"
             const val IID_URI_FACTORY = "44a9796f-723e-4fdf-a218-033e75b0c084"
             const val IID_STREAM_REF_STATICS = "857309dc-3fbf-4e7d-986f-ef3b1a07a964"
-            private val handlerIids =
-                listOf(
-                    "00000000-0000-0000-c000-000000000046", // IUnknown
-                    "94ea2b94-e9cc-49e0-c0ff-ee64ca8f5b90", // IAgileObject (callbacks may arrive on any thread)
-                    "0557e996-7b23-5bae-aa81-ea0d671143a4", // TypedEventHandler<SMTC, ButtonPressedEventArgs>
-                ).map { guid(it).getByteArray(0, 16) }
+            const val IID_BUTTON_HANDLER = "0557e996-7b23-5bae-aa81-ea0d671143a4" // TypedEventHandler<SMTC, ButtonPressedEventArgs>
+            const val IID_SEEK_HANDLER = "44e34f15-bdc0-50a7-ace4-39e91fb753f1" // TypedEventHandler<SMTC, PlaybackPositionChangeRequestedEventArgs>
 
             /** Calls slot [index] of a COM object's vtable. */
             fun call(obj: Pointer, index: Int, vararg args: Any): Int =

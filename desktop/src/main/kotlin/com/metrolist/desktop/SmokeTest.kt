@@ -21,6 +21,8 @@ fun runSmokeTest(queryArg: String?): Unit = runBlocking {
     val query = queryArg ?: "Daft Punk One More Time"
     com.metrolist.desktop.playback.Spectrum.selfCheck()
     println("spectrum self-check: ok")
+    com.metrolist.desktop.playback.Equalizer.selfCheck()
+    println("equaliser self-check: ok")
     with(com.metrolist.desktop.integrations.Updater) {
         check(isNewer("1.1.0", "1.0.0") && isNewer("1.0.10", "1.0.9") && !isNewer("1.0.0", "1.0.0") && !isNewer("1.0.0", "1.1.0")) { "version compare" }
     }
@@ -37,6 +39,13 @@ fun runSmokeTest(queryArg: String?): Unit = runBlocking {
         check(merge(lib, remote, complete = false).liked.map { it.id } == listOf("local", "gone", "kept", "new")) { "partial like merge" }
     }
     println("like merge self-check: ok")
+    java.io.File.createTempFile("metrolist-backup", ".json").let { f ->
+        com.metrolist.desktop.data.Backup.export(f)
+        val cookie = com.metrolist.desktop.data.Settings.value.cookie
+        check(f.length() > 0 && (cookie.isBlank() || cookie !in f.readText())) { "backup must not contain the sign-in" }
+        f.delete()
+    }
+    println("backup self-check: ok")
     YouTube.visitorData = YouTube.visitorData().getOrNull()
     println("visitorData: ${if (YouTube.visitorData != null) "ok" else "missing"}")
 
@@ -57,6 +66,7 @@ fun runSmokeTest(queryArg: String?): Unit = runBlocking {
     val (url, entry) = RangeProxy.register(stream)
     val done = CountDownLatch(1)
     val ready = CountDownLatch(1)
+    val advanced = CountDownLatch(1)
     var failure: Throwable? = null
     val t1 = System.currentTimeMillis()
     val engine =
@@ -67,6 +77,7 @@ fun runSmokeTest(queryArg: String?): Unit = runBlocking {
                     ready.countDown()
                 }
                 override fun onEnded() = done.countDown()
+                override fun onAdvanced(key: String, durationMs: Long) = advanced.countDown()
                 override fun onError(error: Throwable, httpStatus: Int?) {
                     failure = error
                     println("error: $error http=$httpStatus")
@@ -82,7 +93,19 @@ fun runSmokeTest(queryArg: String?): Unit = runBlocking {
     engine.seekTo(60_000)
     Thread.sleep(2500)
     println("position after seek to 60 s (+2.5 s): ${engine.positionMs} ms")
+    val seekOk = engine.positionMs > 60_000
+    // Gapless hand-over into a local file with the equaliser on: the path downloaded songs take.
+    val local = java.io.File.createTempFile("metrolist-smoke", ".audio")
+    java.net.URI(url).toURL().openStream().use { input -> local.outputStream().use { input.copyTo(it) } }
+    engine.equalizer.setGains(listOf(3f, 0f, 0f, 0f, 3f))
+    engine.prepareNext("local", local.absolutePath, null, 1f)
+    engine.seekTo(engine.durationMs - 4000)
+    val handedOver = advanced.await(25, java.util.concurrent.TimeUnit.SECONDS)
+    Thread.sleep(2000)
+    val after = engine.positionMs
+    println("gapless into local file (${local.length()} bytes): advanced=$handedOver position=$after ms")
     engine.stop()
+    local.delete()
     done.countDown()
-    exitProcess(if (failure == null && engine.positionMs > 60_000) 0 else 1)
+    exitProcess(if (failure == null && seekOk && handedOver && after in 500..6000) 0 else 1)
 }

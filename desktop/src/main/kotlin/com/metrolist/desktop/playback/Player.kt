@@ -67,6 +67,19 @@ object Player : AudioEngine.Listener {
     private var radioContinuation: String? = null
     private var unshuffled: List<Track>? = null
 
+    /** Where a track's audio comes from: a downloaded file, or a stream behind the loopback proxy. */
+    private class Source(val url: String, val entry: RangeProxy.Entry?, val stream: ResolvedStream?, val loudnessDb: Double?)
+
+    // Gapless: the next track is opened shortly before the current one ends.
+    private var preparedFor: String? = null
+    private var preparedSource: Source? = null
+
+    private var sleepJob: Job? = null
+    private val _sleepEndsAt = MutableStateFlow<Long?>(null)
+    val sleepEndsAt: StateFlow<Long?> = _sleepEndsAt.asStateFlow()
+    private val _sleepAtEnd = MutableStateFlow(false)
+    val sleepAtEnd: StateFlow<Boolean> = _sleepAtEnd.asStateFlow()
+
     init {
         Thread({
             runCatching { AudioEngine.preload() }.onFailure { Timber.tag("Player").e(it, "FFmpeg failed to load") }
@@ -74,11 +87,16 @@ object Player : AudioEngine.Listener {
         }, "ffmpeg-preload").apply { isDaemon = true }.start()
 
         engine.volume = Settings.value.volume
+        engine.outputDevice = Settings.value.outputDevice
+        engine.equalizer.setGains(Settings.value.eqGains)
         scope.launch {
             while (true) {
                 if (engineLoaded) {
                     _position.value = engine.positionMs
                     _buffering.value = engine.isBuffering
+                    val next = expectedNext()
+                    if (preparedFor != null && preparedFor != next?.id) cancelPrepared()
+                    if (preparedFor == null && next != null && _isPlaying.value && _duration.value > 0 && _duration.value - _position.value < 20_000) prepare(next)
                 }
                 delay(150)
             }
@@ -292,6 +310,32 @@ object Player : AudioEngine.Listener {
         if (engineLoaded) engine.seekTo(ms) else if (_current.value != null) load(ms, _isPlaying.value)
     }
 
+    /** [minutes] > 0 pauses after that long, 0 pauses when the current song ends, null turns the timer off. */
+    fun setSleepTimer(minutes: Int?) {
+        sleepJob?.cancel()
+        _sleepAtEnd.value = minutes == 0
+        _sleepEndsAt.value = minutes?.takeIf { it > 0 }?.let { System.currentTimeMillis() + it * 60_000L }
+        if (minutes != null && minutes > 0) {
+            sleepJob =
+                scope.launch {
+                    delay(minutes * 60_000L)
+                    pause()
+                    _sleepEndsAt.value = null
+                }
+        }
+    }
+
+    fun setOutputDevice(name: String) {
+        Settings.update { it.copy(outputDevice = name) }
+        engine.outputDevice = name
+        if (engineLoaded) load(_position.value, _isPlaying.value) // the audio line is opened per load
+    }
+
+    fun setEqualizer(gains: List<Float>) {
+        Settings.update { it.copy(eqGains = gains) }
+        engine.equalizer.setGains(gains)
+    }
+
     fun setVolume(v: Float) {
         engine.volume = v.coerceIn(0f, 1f)
         Settings.update { it.copy(volume = engine.volume) }
@@ -326,6 +370,7 @@ object Player : AudioEngine.Listener {
     private fun load(startMs: Long, play: Boolean) {
         val track = _current.value ?: return
         loadJob?.cancel()
+        cancelPrepared()
         engine.stop()
         engineLoaded = false
         _readyTrackId.value = null
@@ -339,26 +384,62 @@ object Player : AudioEngine.Listener {
         loadJob =
             scope.launch {
                 nativesReady.await()
-                val resolved =
-                    StreamResolver.resolve(track.id, Settings.value.audioQuality).getOrElse {
+                val src =
+                    source(track).getOrElse {
                         Timber.tag("Player").e(it, "resolve failed for ${track.id}")
                         _error.value = "Can't play \"${track.title}\": ${it.message ?: it::class.simpleName}"
                         _buffering.value = false
                         _isPlaying.value = false
                         return@launch
                     }
-                if (_current.value?.id != track.id) return@launch
-                stream = resolved
-                val (url, entry) = RangeProxy.register(resolved)
-                proxyUrl = url
-                engine.normalizationGain =
-                    if (Settings.value.normalizeVolume) AudioEngine.normalizationFor(resolved.loudnessDb) else 1f
-                engine.load(url, entry, startMs, play)
+                if (_current.value?.id != track.id) return@launch RangeProxy.unregister(src.url)
+                stream = src.stream
+                proxyUrl = src.url
+                engine.normalizationGain = gainFor(src)
+                engine.load(src.url, src.entry, startMs, play)
                 engineLoaded = true
                 if (Settings.value.recordHistory) Library.addHistory(track)
                 extendRadioIfNeeded()
                 prefetchNext()
             }
+    }
+
+    private suspend fun source(track: Track): Result<Source> {
+        com.metrolist.desktop.data.Downloads.entry(track.id)?.let { d ->
+            return Result.success(Source(com.metrolist.desktop.data.Downloads.file(track.id).absolutePath, null, null, d.loudnessDb))
+        }
+        return StreamResolver.resolve(track.id, Settings.value.audioQuality).map {
+            val (url, entry) = RangeProxy.register(it)
+            Source(url, entry, it, it.loudnessDb)
+        }
+    }
+
+    private fun gainFor(src: Source) = if (Settings.value.normalizeVolume) AudioEngine.normalizationFor(src.loudnessDb) else 1f
+
+    /** The track that follows the current one if nothing is touched (same rules as [onEnded]). */
+    private fun expectedNext(): Track? =
+        when {
+            _sleepAtEnd.value -> null
+            _repeat.value == RepeatMode.ONE -> _current.value
+            else -> _queue.value.getOrNull(_index.value + 1) ?: _queue.value.firstOrNull().takeIf { _repeat.value == RepeatMode.ALL }
+        }
+
+    private fun prepare(next: Track) {
+        preparedFor = next.id
+        scope.launch {
+            // A failed resolve leaves preparedFor set: no retry storm, the track just loads normally at the end.
+            val src = source(next).getOrNull() ?: return@launch
+            if (preparedFor != next.id) return@launch RangeProxy.unregister(src.url)
+            preparedSource = src
+            engine.prepareNext(next.id, src.url, src.entry, gainFor(src))
+        }
+    }
+
+    private fun cancelPrepared() {
+        preparedFor = null
+        preparedSource?.let { RangeProxy.unregister(it.url) }
+        preparedSource = null
+        engine.clearNext()
     }
 
     private fun prefetchNext() {
@@ -376,13 +457,39 @@ object Player : AudioEngine.Listener {
         scope.launch { _readyTrackId.value = _current.value?.id }
     }
 
+    override fun onAdvanced(key: String, durationMs: Long) {
+        scope.launch {
+            val src = preparedSource
+            val next = expectedNext()
+            // The queue changed in the last moment: fall back to loading the right track.
+            if (src == null || preparedFor != key || next?.id != key) return@launch onEnded()
+            proxyUrl?.let(RangeProxy::unregister)
+            proxyUrl = src.url
+            stream = src.stream
+            preparedFor = null
+            preparedSource = null
+            if (_repeat.value != RepeatMode.ONE) _index.value = if (_index.value + 1 < _queue.value.size) _index.value + 1 else 0
+            _current.value = next
+            _position.value = 0
+            _duration.value = durationMs.takeIf { it > 0 } ?: ((next.durationSec ?: 0) * 1000L)
+            _readyTrackId.value = next.id
+            if (Settings.value.recordHistory) Library.addHistory(next)
+            snapshot()
+            extendRadioIfNeeded()
+            prefetchNext()
+        }
+    }
+
     override fun onEnded() {
         scope.launch {
-            if (_repeat.value == RepeatMode.ONE) {
+            val sleep = _sleepAtEnd.value
+            _sleepAtEnd.value = false
+            if (!sleep && _repeat.value == RepeatMode.ONE) {
                 load(0, true)
-            } else if (_index.value + 1 < _queue.value.size || _repeat.value == RepeatMode.ALL) {
+            } else if (!sleep && (_index.value + 1 < _queue.value.size || _repeat.value == RepeatMode.ALL)) {
                 next()
             } else {
+                engine.stop() // also ends a gapless hand-over that was no longer wanted
                 _isPlaying.value = false
                 engineLoaded = false
                 _position.value = 0

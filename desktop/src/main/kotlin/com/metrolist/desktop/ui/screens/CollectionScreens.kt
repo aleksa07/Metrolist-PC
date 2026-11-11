@@ -1,5 +1,8 @@
 package com.metrolist.desktop.ui.screens
 
+import kotlinx.coroutines.launch
+import com.metrolist.desktop.data.Settings
+import androidx.compose.runtime.produceState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -188,6 +191,8 @@ private fun PlaylistContent(
     isPodcast: Boolean,
 ) {
     val songs = remember(playlist.id) { mutableStateListOf<Track>().apply { addAll(firstSongs.map { it.toTrack() }) } }
+    // YouTube's per-entry ids, needed to remove a song from one of the account's own playlists.
+    val setVideoIds = remember(playlist.id) { HashMap<String, String>().apply { firstSongs.forEach { s -> s.setVideoId?.let { put(s.id, it) } } } }
     var continuation by remember(playlist.id) { mutableStateOf(firstContinuation) }
     val listState = rememberLazyListState()
     LoadMoreOnScroll(listState, playlist.id) {
@@ -196,6 +201,7 @@ private fun PlaylistContent(
         YouTube.playlistContinuation(c).onSuccess { more ->
             val known = songs.map { s -> s.id }.toHashSet()
             songs.addAll(more.songs.map { s -> s.toTrack() }.filterNot { s -> s.id in known })
+            more.songs.forEach { s -> s.setVideoId?.let { setVideoIds[s.id] = it } }
             continuation = more.continuation
         }
     }
@@ -221,7 +227,20 @@ private fun PlaylistContent(
             }
         }
         itemsIndexed(songs, key = { i, t -> "$i-${t.id}" }) { i, t ->
-            TrackRow(t, onClick = { Player.playQueue(songs.toList(), i, playlist.title) }, menu = { trackMenu(nav, t) }, index = i)
+            val remove =
+                setVideoIds[t.id]?.takeIf { playlist.isEditable }?.let { setId ->
+                    MenuEntry("Remove from this playlist", Icons.Default.Delete) {
+                        Ui.scope.launch {
+                            YouTube.removeFromPlaylist(playlist.id.removePrefix("VL"), t.id, setId)
+                                .onSuccess {
+                                    songs.remove(t)
+                                    com.metrolist.desktop.ui.invalidateLoad("playlist:${playlist.id}")
+                                    Ui.toast("Removed from ${playlist.title}")
+                                }.onFailure { Ui.toast("Couldn't remove the song") }
+                        }
+                    }
+                }
+            TrackRow(t, onClick = { Player.playQueue(songs.toList(), i, playlist.title) }, menu = { trackMenu(nav, t, listOfNotNull(remove)) }, index = i)
         }
     }
 }
@@ -395,6 +414,19 @@ fun AddToPlaylistDialog() {
     val tracks = Ui.addToPlaylist ?: return
     val lib by Library.state.collectAsState()
     var newName by remember { mutableStateOf("") }
+    val signedIn = Settings.value.cookie.isNotBlank()
+    val accountPlaylists by produceState(emptyList<PlaylistItem>()) {
+        if (signedIn) value = YouTube.library("FEmusic_liked_playlists").getOrNull()?.items?.filterIsInstance<PlaylistItem>()?.filter { it.isEditable }.orEmpty()
+    }
+    fun addToAccount(playlistId: String, name: String) {
+        Ui.addToPlaylist = null
+        Ui.scope.launch {
+            val failed = tracks.count { YouTube.addToPlaylist(playlistId.removePrefix("VL"), it.id).isFailure }
+            com.metrolist.desktop.ui.invalidateLoad("playlist:$playlistId")
+            com.metrolist.desktop.ui.invalidateLoad("ytlibrary")
+            Ui.toast(if (failed == 0) "Added to $name on YouTube Music" else "Couldn't add $failed of ${tracks.size} songs to $name")
+        }
+    }
     AlertDialog(
         onDismissRequest = { Ui.addToPlaylist = null },
         title = { Text(if (tracks.size == 1) "Add \"${tracks.first().title}\" to playlist" else "Add ${tracks.size} songs to playlist") },
@@ -407,6 +439,9 @@ fun AddToPlaylistDialog() {
                         Ui.toast("Added to ${pl.name}")
                     }) { Text("${pl.name}  (${pl.tracks.size})") }
                 }
+                accountPlaylists.forEach { pl ->
+                    TextButton(onClick = { addToAccount(pl.id, pl.title) }) { Text("${pl.title}  (YouTube Music)") }
+                }
                 Spacer(Modifier.height(8.dp))
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     OutlinedTextField(newName, { newName = it }, label = { Text("New playlist") }, singleLine = true, modifier = Modifier.weight(1f))
@@ -416,6 +451,16 @@ fun AddToPlaylistDialog() {
                         Ui.addToPlaylist = null
                         Ui.toast("Created ${newName.trim()}")
                     }) { Text("Create") }
+                }
+                if (signedIn) {
+                    TextButton(enabled = newName.isNotBlank(), onClick = {
+                        val name = newName.trim()
+                        Ui.scope.launch {
+                            runCatching { YouTube.createPlaylist(name) }
+                                .onSuccess { id -> addToAccount(id, name) }
+                                .onFailure { Ui.toast("Couldn't create the playlist on YouTube Music") }
+                        }
+                    }) { Text("Create on YouTube Music instead") }
                 }
             }
         },

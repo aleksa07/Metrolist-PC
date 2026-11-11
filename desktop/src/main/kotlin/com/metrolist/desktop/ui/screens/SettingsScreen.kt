@@ -1,5 +1,16 @@
 package com.metrolist.desktop.ui.screens
 
+import com.metrolist.desktop.playback.Player
+import com.metrolist.desktop.playback.Equalizer
+import com.metrolist.desktop.data.Backup
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.Slider
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.AlertDialog
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -75,6 +86,90 @@ private fun <T> ChoiceRow(title: String, options: List<Pair<String, T>>, selecte
 }
 
 @Composable
+private fun OutputDeviceRow(selected: String) {
+    var open by remember { mutableStateOf(false) }
+    val devices = remember(open) { com.metrolist.desktop.playback.AudioEngine.outputDevices() }
+    Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+        Text("Output device", style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
+        Box {
+            OutlinedButton(onClick = { open = true }) { Text(selected.ifBlank { "System default" }, maxLines = 1) }
+            DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+                (listOf("") + devices).forEach { d ->
+                    DropdownMenuItem(text = { Text(d.ifBlank { "System default" }) }, onClick = { open = false; Player.setOutputDevice(d) })
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun EqualizerSection(gains: List<Float>) {
+    Row(Modifier.padding(horizontal = 16.dp, vertical = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        Equalizer.PRESETS.forEach { (name, preset) ->
+            FilterChip(selected = gains == preset, onClick = { Player.setEqualizer(preset) }, label = { Text(name) })
+        }
+    }
+    Equalizer.FREQS.forEachIndexed { i, f ->
+        val g = gains.getOrElse(i) { 0f }
+        Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp), verticalAlignment = Alignment.CenterVertically) {
+            Text(if (f >= 1000) "${f / 1000} kHz".replace(".0 ", " ") else "${f.toInt()} Hz", modifier = Modifier.width(72.dp))
+            Slider(
+                value = g,
+                onValueChange = { v -> Player.setEqualizer(List(Equalizer.FREQS.size) { j -> if (j == i) v.roundToInt().toFloat() else gains.getOrElse(j) { 0f } }) },
+                valueRange = -Equalizer.MAX_DB..Equalizer.MAX_DB,
+                modifier = Modifier.weight(1f),
+            )
+            Text("${if (g > 0) "+" else ""}${g.roundToInt()} dB", textAlign = TextAlign.End, modifier = Modifier.width(64.dp))
+        }
+    }
+}
+
+@Composable
+private fun BackupSection() {
+    var importing by remember { mutableStateOf<java.io.File?>(null) }
+    fun pick(save: Boolean): java.io.File? {
+        val dialog = java.awt.FileDialog(null as java.awt.Frame?, if (save) "Save backup" else "Open backup", if (save) java.awt.FileDialog.SAVE else java.awt.FileDialog.LOAD)
+        if (save) dialog.file = "metrolist-backup.json"
+        dialog.isVisible = true
+        return dialog.file?.let { java.io.File(dialog.directory, it) }
+    }
+    Text(
+        "Likes, playlists, history and settings in one file, to move to another PC. Sign-ins and downloaded songs are not included.",
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 10.dp),
+    )
+    Row(Modifier.padding(16.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+        OutlinedButton(onClick = {
+            pick(save = true)?.let { f ->
+                runCatching { Backup.export(f) }.onSuccess { Ui.toast("Backup saved") }.onFailure { Ui.toast("Couldn't save the backup: ${it.message}") }
+            }
+        }) { Text("Export…") }
+        OutlinedButton(onClick = { importing = pick(save = false) }) { Text("Import…") }
+    }
+    importing?.let { f ->
+        AlertDialog(
+            onDismissRequest = { importing = null },
+            title = { Text("Replace your library?") },
+            text = { Text("Importing replaces the likes, playlists, history and settings on this PC with the ones in ${f.name}.") },
+            confirmButton = {
+                TextButton(onClick = {
+                    importing = null
+                    Backup.import(f)
+                        .onSuccess {
+                            Player.setVolume(Settings.value.volume)
+                            Player.setEqualizer(Settings.value.eqGains)
+                            applyAccountSettings()
+                            Ui.toast("Backup imported")
+                        }.onFailure { Ui.toast("That file isn't a Metrolist backup") }
+                }) { Text("Replace") }
+            },
+            dismissButton = { TextButton(onClick = { importing = null }) { Text("Cancel") } },
+        )
+    }
+}
+
+@Composable
 fun SettingsScreen() {
     val s by Settings.state.collectAsState()
     Column(Modifier.verticalScroll(rememberScrollState()).padding(horizontal = 32.dp, vertical = 16.dp).widthIn(max = 860.dp)) {
@@ -94,7 +189,16 @@ fun SettingsScreen() {
             SwitchRow("Normalise volume", "Use YouTube loudness data to level tracks", s.normalizeVolume) { v -> Settings.update { it.copy(normalizeVolume = v) } }
             SwitchRow("Close to system tray", "The X button hides the window and music keeps playing; quit from the tray icon", s.closeToTray) { v -> Settings.update { it.copy(closeToTray = v) } }
             SwitchRow("Autoplay radio", "Fill the queue with similar songs when you play a single track", s.autoRadio) { v -> Settings.update { it.copy(autoRadio = v) } }
+            if (System.getProperty("os.name").lowercase().contains("mac")) {
+                SwitchRow("macOS media controls (experimental)", "Media keys and Now Playing. Not tested on a Mac yet: turn it off if the app misbehaves. Applies after a restart.", s.macMediaControls) { v -> Settings.update { it.copy(macMediaControls = v) } }
+            }
+            HorizontalDivider()
+            OutputDeviceRow(s.outputDevice)
         }
+
+        Group("Equalizer") { EqualizerSection(s.eqGains) }
+
+        Group("Backup") { BackupSection() }
 
         Group("Content") {
             var lang by remember { mutableStateOf(s.contentLanguage) }

@@ -64,6 +64,7 @@ fun main(args: Array<String>) {
         val icon = painterResource("icon.png")
         var visible by remember { androidx.compose.runtime.mutableStateOf(true) }
         fun show() {
+            Ui.miniPlayer = false
             visible = true
             windowState.isMinimized = false
         }
@@ -98,10 +99,20 @@ fun main(args: Array<String>) {
                 Item("Quit Metrolist") { quit() }
             },
         )
+        if (Ui.miniPlayer) {
+            // Stands in for the main window while open; closing it brings the main window back.
+            Window(onCloseRequest = ::show, state = rememberWindowState(size = DpSize(440.dp, 180.dp)), title = "Metrolist", icon = icon, alwaysOnTop = true, resizable = false) {
+                MetrolistTheme {
+                    val surface = androidx.compose.material3.MaterialTheme.colorScheme.surfaceContainer
+                    androidx.compose.runtime.LaunchedEffect(surface) { com.metrolist.desktop.ui.TitleBar.apply(window, surface) }
+                    com.metrolist.desktop.ui.MiniPlayer()
+                }
+            }
+        }
         Window(
             // With "close to tray" the X button only hides the window; music keeps playing and the tray icon brings it back.
             onCloseRequest = { if (Settings.value.closeToTray) visible = false else quit() },
-            visible = visible,
+            visible = visible && !Ui.miniPlayer,
             state = windowState,
             title = current?.let { "${it.title} • ${it.artistText} — Metrolist" } ?: "Metrolist",
             icon = icon,
