@@ -129,6 +129,9 @@ object Integrations {
 
     // ---- Discord ----
 
+    // Discord fetches these itself, so they must stay reachable on the default branch.
+    private const val ICONS = "https://raw.githubusercontent.com/aleksa07/Metrolist-PC/desktop/desktop/assets/discord"
+
     private fun template(t: String, track: Track) =
         t.replace("{song.name}", track.title)
             .replace("{artist.name}", track.artistText.ifBlank { "Unknown Artist" })
@@ -159,7 +162,10 @@ object Integrations {
                     }
                     putJsonObject("assets") {
                         track.thumbnail.resized(512)?.let { put("large_image", it) }
-                        put("large_text", (track.album?.name ?: track.title).take(128).padEnd(2, ' '))
+                        // Discord shows this as a third line, so skip it when it would repeat the title.
+                        track.album?.name?.takeIf { it != track.title }?.let { put("large_text", it.take(128).padEnd(2, ' ')) }
+                        put("small_image", "$ICONS/${if (playing) "play" else "pause"}.png")
+                        put("small_text", if (playing) "Playing" else "Paused")
                     }
                     if (s.discordListenButton || s.discordProjectButton) {
                         putJsonArray("buttons") {
