@@ -21,6 +21,10 @@ fun runSmokeTest(queryArg: String?): Unit = runBlocking {
     val query = queryArg ?: "Daft Punk One More Time"
     com.metrolist.desktop.playback.Spectrum.selfCheck()
     println("spectrum self-check: ok")
+    with(com.metrolist.desktop.integrations.Updater) {
+        check(isNewer("1.1.0", "1.0.0") && isNewer("1.0.10", "1.0.9") && !isNewer("1.0.0", "1.0.0") && !isNewer("1.0.0", "1.1.0")) { "version compare" }
+    }
+    println("update version self-check: ok")
     YouTube.visitorData = YouTube.visitorData().getOrNull()
     println("visitorData: ${if (YouTube.visitorData != null) "ok" else "missing"}")
 

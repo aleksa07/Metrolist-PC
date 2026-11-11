@@ -1,9 +1,11 @@
+import com.google.protobuf.gradle.proto
 import org.jetbrains.compose.desktop.application.dsl.TargetFormat
 
 plugins {
     kotlin("jvm") version libs.versions.kotlin.get()
     alias(libs.plugins.kotlin.serialization)
     alias(libs.plugins.compose.compiler)
+    alias(libs.plugins.protobuf)
     id("org.jetbrains.compose") version "1.12.2"
 }
 
@@ -17,7 +19,18 @@ kotlin {
         // Reuse the Android app's YouTube Music API layer verbatim.
         kotlin.srcDir("../innertube/src/main/kotlin")
         // Also reuse the Android app's pure-Kotlin Last.fm and lyrics clients; skip the rest of the Android sources.
-        val shared = listOf("com/metrolist/lastfm", "com/metrolist/lrclib", "com/metrolist/kugou", "com/metrolist/music/betterlyrics")
+        val shared =
+            listOf(
+                "com/metrolist/lastfm",
+                "com/metrolist/lrclib",
+                "com/metrolist/kugou",
+                "com/metrolist/music/betterlyrics",
+                // Listen Together wire protocol, shared with the Android app and its servers.
+                "com/metrolist/music/listentogether/Protocol.kt",
+                "com/metrolist/music/listentogether/MessageCodec.kt",
+                "com/metrolist/music/listentogether/ServerClock.kt",
+                "com/metrolist/music/listentogether/ListenTogetherServers.kt",
+            )
         kotlin.srcDir("../app/src/main/kotlin")
         kotlin.exclude { e ->
             e.file.invariantSeparatorsPath.contains("/app/src/main/kotlin/") &&
@@ -55,6 +68,8 @@ dependencies {
 
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-swing:1.11.0")
     implementation("net.java.dev.jna:jna:5.17.0")
+    implementation(libs.protobuf.javalite)
+    implementation(libs.protobuf.kotlin.lite)
     // Embedded Chromium for Google sign-in; its natives download on first use, not in the installer.
     implementation("me.friwi:jcefmaven:152.0.6")
 
@@ -80,6 +95,11 @@ compose.desktop {
             listOf(
                 "-Xmx768m",
                 "--enable-native-access=ALL-UNNAMED",
+                // AppCDS: the first launch records the ~10k classes Compose loads; later launches map them in.
+                "-XX:+AutoCreateSharedArchive",
+                "-XX:SharedArchiveFile=\$APPDIR/metrolist.jsa",
+                "-Xlog:cds=off",
+                "-Xlog:cds+dynamic=off",
                 // Required by JCEF on Java 17+.
                 "--add-exports=java.desktop/sun.awt=ALL-UNNAMED",
                 "--add-exports=java.desktop/java.awt.peer=ALL-UNNAMED",
@@ -101,12 +121,37 @@ compose.desktop {
                 shortcut = true
                 dirChooser = true
                 upgradeUuid = "6f1d9a8e-5b0e-4f3a-9c0c-3d5d7a1e2b11"
+                // Per-user install (%LOCALAPPDATA%\Programs): the app folder stays writable for the
+                // class-data archive above, and updates install without an administrator prompt.
+                perUserInstall = true
                 iconFile.set(project.file("icon.ico"))
             }
             linux {
                 packageName = "metrolist-pc"
                 debMaintainer = "aleksa07@users.noreply.github.com"
                 iconFile.set(project.file("src/main/resources/icon.png"))
+            }
+        }
+    }
+}
+
+// jlink drops the JDK's base class-data archive; regenerate it so AppCDS (see jvmArgs) can build on it.
+tasks.withType<org.jetbrains.compose.desktop.application.tasks.AbstractJLinkTask>().configureEach {
+    freeArgs.add("--generate-cds-archive")
+    // CDS generation runs the image's own java.exe, which Compose strips by default (internal flag).
+    @Suppress("UNCHECKED_CAST")
+    (javaClass.getMethod("getStripNativeCommands\$compose").invoke(this) as Property<Boolean>).set(false)
+}
+
+sourceSets.main { proto { srcDir("../app/src/main/proto") } }
+
+protobuf {
+    protoc { artifact = "com.google.protobuf:protoc:${libs.versions.protobuf.get()}" }
+    generateProtoTasks {
+        all().configureEach {
+            builtins {
+                named("java") { option("lite") }
+                create("kotlin") { option("lite") }
             }
         }
     }

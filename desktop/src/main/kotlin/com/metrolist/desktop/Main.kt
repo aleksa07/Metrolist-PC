@@ -3,6 +3,7 @@ package com.metrolist.desktop
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.isAltPressed
@@ -35,6 +36,7 @@ import com.metrolist.innertube.YouTube
 import kotlinx.coroutines.launch
 import okio.Path.Companion.toOkioPath
 
+
 fun main(args: Array<String>) {
     if ("--smoke-test" in args) {
         // The packaged GUI launcher has no console, so the self-test reports to a log file.
@@ -43,9 +45,12 @@ fun main(args: Array<String>) {
         System.setErr(log)
         return runSmokeTest(null)
     }
-    applyAccountSettings()
-    Ui.scope.launch {
+    // Building the YouTube client (HTTP stack, JSON) takes ~0.5 s; do it off the UI thread.
+    Thread({ applyAccountSettings() }, "youtube-init").start()
+    Ui.scope.launch(kotlinx.coroutines.Dispatchers.IO) {
         YouTube.visitorData().onSuccess { YouTube.visitorData = it }
+        com.metrolist.desktop.data.LikeSync.syncInBackground()
+        if (Settings.value.checkUpdates) com.metrolist.desktop.integrations.Updater.check()
         StreamResolver.prewarm()
     }
     Player // starts loading FFmpeg natives and restores the last queue
@@ -57,13 +62,21 @@ fun main(args: Array<String>) {
         val current by Player.current.collectAsState()
         val playing by Player.isPlaying.collectAsState()
         val icon = painterResource("icon.png")
+        var visible by androidx.compose.runtime.mutableStateOf(true)
+        fun show() {
+            visible = true
+            windowState.isMinimized = false
+        }
         fun quit() {
             Player.saveState()
             Settings.flush()
             Library.flush()
             com.metrolist.desktop.integrations.GoogleLogin.dispose()
             exitApplication()
+            // Idle HTTP/decoder threads would keep the JVM alive; a clean exit also lets Java save the class archive.
+            kotlin.system.exitProcess(0)
         }
+        com.metrolist.desktop.integrations.Updater.quitForInstall = ::quit
         setSingletonImageLoaderFactory { ctx ->
             ImageLoader.Builder(ctx)
                 .memoryCache { MemoryCache.Builder().maxSizeBytes(160L * 1024 * 1024).build() }
@@ -74,8 +87,9 @@ fun main(args: Array<String>) {
         Tray(
             icon = icon,
             tooltip = current?.let { "${it.title} – ${it.artistText}" } ?: "Metrolist",
-            onAction = { windowState.isMinimized = false },
+            onAction = ::show,
             menu = {
+                Item("Show Metrolist") { show() }
                 current?.let { Item("${it.title} – ${it.artistText}".take(60), enabled = false) {} }
                 Item(if (playing) "Pause" else "Play") { Player.togglePlay() }
                 Item("Next") { Player.next() }
@@ -85,7 +99,9 @@ fun main(args: Array<String>) {
             },
         )
         Window(
-            onCloseRequest = ::quit,
+            // With "close to tray" the X button only hides the window; music keeps playing and the tray icon brings it back.
+            onCloseRequest = { if (Settings.value.closeToTray) visible = false else quit() },
+            visible = visible,
             state = windowState,
             title = current?.let { "${it.title} • ${it.artistText} — Metrolist" } ?: "Metrolist",
             icon = icon,

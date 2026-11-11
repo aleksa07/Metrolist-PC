@@ -97,6 +97,10 @@ data class AppSettings(
     val scrobblePercent: Float = 0.5f,
     val scrobbleMinutes: Int = 4,
     val scrobbleMinTrackSec: Int = 30,
+    val closeToTray: Boolean = true,
+    val checkUpdates: Boolean = true,
+    val autoInstallUpdates: Boolean = true,
+    val listenTogetherName: String = System.getProperty("user.name").orEmpty().take(24),
     // Discord Rich Presence
     val discordEnabled: Boolean = false,
     val discordActivityType: Int = 2,
@@ -116,6 +120,8 @@ data class LibraryData(
     val saved: List<SavedItem> = emptyList(),
     val playlists: List<LocalPlaylist> = emptyList(),
     val searchHistory: List<String> = emptyList(),
+    /** Liked-song ids seen on the YouTube Music account at the last sync (to detect remote unlikes). */
+    val likedSnapshot: List<String> = emptyList(),
 )
 
 object Library : JsonStore<LibraryData>("library.json", LibraryData.serializer(), { LibraryData() }) {

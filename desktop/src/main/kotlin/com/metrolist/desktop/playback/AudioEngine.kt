@@ -47,11 +47,6 @@ class AudioEngine(private val listener: Listener) {
         for (i in out.indices) out[i] = ring[Math.floorMod(end - out.size + i, RING.toLong()).toInt()]
     }
 
-    init {
-        avutil.av_log_set_level(avutil.AV_LOG_ERROR)
-        runCatching { FFmpegLogCallback.setLevel(avutil.AV_LOG_ERROR) }
-    }
-
     fun load(url: String, entry: RangeProxy.Entry?, startMs: Long, playWhenReady: Boolean) {
         val gen = synchronized(lock) { ++generation }
         paused = !playWhenReady
@@ -192,6 +187,7 @@ class AudioEngine(private val listener: Listener) {
             org.bytedeco.javacpp.Loader.load(org.bytedeco.ffmpeg.global.avformat::class.java)
             org.bytedeco.javacpp.Loader.load(org.bytedeco.ffmpeg.global.swresample::class.java)
             avutil.av_log_set_level(avutil.AV_LOG_ERROR)
+            runCatching { FFmpegLogCallback.setLevel(avutil.AV_LOG_ERROR) }
             Timber.tag("AudioEngine").d("FFmpeg natives loaded in ${(System.nanoTime() - t0) / 1_000_000} ms")
         }
         const val CHANNELS = 2

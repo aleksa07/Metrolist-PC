@@ -112,6 +112,7 @@ object Actions {
         val liked = Library.isLiked(track.id)
         Library.toggleLike(track)
         com.metrolist.desktop.integrations.Integrations.onLike(track, !liked)
+        com.metrolist.desktop.data.LikeSync.push(track, !liked)
         Ui.toast(if (liked) "Removed from liked songs" else "Added to liked songs")
     }
 }

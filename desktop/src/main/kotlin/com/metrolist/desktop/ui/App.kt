@@ -18,6 +18,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Explore
+import androidx.compose.material.icons.filled.Groups
+import androidx.compose.material.icons.outlined.Groups
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.LibraryMusic
 import androidx.compose.material.icons.filled.Settings
@@ -41,6 +43,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.ExperimentalComposeUiApi
@@ -70,6 +73,7 @@ import com.metrolist.desktop.ui.screens.SearchBox
 import com.metrolist.desktop.ui.screens.SearchScreen
 import com.metrolist.desktop.ui.screens.SettingsScreen
 import com.metrolist.innertube.YouTube
+import kotlinx.coroutines.launch
 import com.metrolist.innertube.models.YouTubeLocale
 
 /** Pushes the saved account cookie and content region into the shared YouTube client. */
@@ -87,6 +91,7 @@ private val tabs =
         Tab(Screen.Home, "Home", Icons.Outlined.Home, Icons.Filled.Home),
         Tab(Screen.Explore, "Explore", Icons.Outlined.Explore, Icons.Filled.Explore),
         Tab(Screen.Library, "Library", Icons.Outlined.LibraryMusic, Icons.Filled.LibraryMusic),
+        Tab(Screen.Together, "Together", Icons.Outlined.Groups, Icons.Filled.Groups),
     )
 
 class AppState {
@@ -158,6 +163,7 @@ fun App(state: AppState) {
                 AnimatedVisibility(Ui.expandedPlayer && current != null, enter = slideInVertically { it }, exit = slideOutVertically { it }) {
                     ExpandedPlayer(nav)
                 }
+                com.metrolist.desktop.integrations.Updater.available?.takeIf { !settings.autoInstallUpdates }?.let { r -> UpdateBanner(r.version) }
                 SnackbarHost(snackbar, Modifier.align(Alignment.BottomCenter).padding(bottom = 100.dp)) { Snackbar(it) }
                 AddToPlaylistDialog()
             }
@@ -177,6 +183,7 @@ private fun ScreenHost(nav: Navigator) {
                     Screen.Explore -> ExploreScreen()
                     Screen.Library -> LibraryScreen()
                     Screen.Settings -> SettingsScreen()
+                    Screen.Together -> com.metrolist.desktop.ui.screens.ListenTogetherScreen()
                     Screen.Charts -> ChartsScreen()
                     is Screen.Search -> SearchScreen(screen)
                     is Screen.Album -> AlbumScreen(screen)
@@ -187,6 +194,26 @@ private fun ScreenHost(nav: Navigator) {
                     is Screen.ArtistItems -> ArtistItemsScreen(screen)
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun androidx.compose.foundation.layout.BoxScope.UpdateBanner(version: String) {
+    val scope = androidx.compose.runtime.rememberCoroutineScope()
+    var dismissed by androidx.compose.runtime.saveable.rememberSaveable { androidx.compose.runtime.mutableStateOf(false) }
+    if (dismissed) return
+    Surface(
+        color = MaterialTheme.colorScheme.primaryContainer,
+        shape = RoundedCornerShape(16.dp),
+        tonalElevation = 6.dp,
+        modifier = Modifier.align(Alignment.TopEnd).padding(16.dp),
+    ) {
+        Row(Modifier.padding(horizontal = 16.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+            Text("Metrolist PC $version is available")
+            Spacer(Modifier.size(12.dp))
+            androidx.compose.material3.TextButton(onClick = { dismissed = true }) { Text("Later") }
+            androidx.compose.material3.Button(onClick = { scope.launch { com.metrolist.desktop.integrations.Updater.install() } }) { Text("Install") }
         }
     }
 }

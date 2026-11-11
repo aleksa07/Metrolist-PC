@@ -92,6 +92,7 @@ fun SettingsScreen() {
             ChoiceRow("Audio quality", listOf("Auto" to AudioQuality.AUTO, "High" to AudioQuality.HIGH, "Low" to AudioQuality.LOW), s.audioQuality) { v -> Settings.update { it.copy(audioQuality = v) } }
             HorizontalDivider()
             SwitchRow("Normalise volume", "Use YouTube loudness data to level tracks", s.normalizeVolume) { v -> Settings.update { it.copy(normalizeVolume = v) } }
+            SwitchRow("Close to system tray", "The X button hides the window and music keeps playing; quit from the tray icon", s.closeToTray) { v -> Settings.update { it.copy(closeToTray = v) } }
             SwitchRow("Autoplay radio", "Fill the queue with similar songs when you play a single track", s.autoRadio) { v -> Settings.update { it.copy(autoRadio = v) } }
         }
 
@@ -123,6 +124,18 @@ fun SettingsScreen() {
 
         Group("Account") {
             AccountSection(s.cookie)
+        }
+
+        Group("Updates") {
+            val scope = androidx.compose.runtime.rememberCoroutineScope()
+            val updater = com.metrolist.desktop.integrations.Updater
+            SwitchRow("Check for updates", "Look for a new version when the app starts", s.checkUpdates) { v -> Settings.update { it.copy(checkUpdates = v) } }
+            SwitchRow("Install updates automatically", "Download and install new versions without asking", s.autoInstallUpdates) { v -> Settings.update { it.copy(autoInstallUpdates = v) } }
+            Row(Modifier.padding(16.dp), horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                OutlinedButton(onClick = { scope.launch { updater.check(userInitiated = true) } }) { Text("Check now") }
+                updater.available?.let { r -> Button(onClick = { scope.launch { updater.install() } }) { Text("Install ${r.version}") } }
+                Text(updater.status ?: "Version ${updater.currentVersion ?: "dev"}", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
         }
 
         Group("About") {
@@ -158,6 +171,9 @@ private fun AccountSection(savedCookie: String) {
         applyAccountSettings()
         com.metrolist.desktop.ui.invalidateLoad("home:null")
         com.metrolist.desktop.ui.invalidateLoad("ytlibrary")
+        // A different account must not "unlike" songs based on the previous account's snapshot.
+        com.metrolist.desktop.data.Library.update { it.copy(likedSnapshot = emptyList()) }
+        com.metrolist.desktop.data.LikeSync.syncInBackground()
     }
     Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         val a = account
@@ -168,6 +184,14 @@ private fun AccountSection(savedCookie: String) {
                     style = MaterialTheme.typography.bodyLarge,
                     modifier = Modifier.weight(1f),
                 )
+                OutlinedButton(enabled = !busy, onClick = {
+                    busy = true
+                    scope.launch {
+                        status = com.metrolist.desktop.data.LikeSync.sync().fold({ "Liked songs synced ($it on your account)" }, { "Sync failed: ${it.message}" })
+                        busy = false
+                    }
+                }) { Text("Sync liked songs") }
+                Spacer(Modifier.width(8.dp))
                 OutlinedButton(onClick = {
                     com.metrolist.desktop.integrations.GoogleLogin.signOut()
                     saveCookie("")

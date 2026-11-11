@@ -16,6 +16,7 @@ sealed interface Screen {
     data object Explore : Screen
     data object Library : Screen
     data object Settings : Screen
+    data object Together : Screen
     data class Search(val query: String) : Screen
     data class Album(val browseId: String) : Screen
     data class Artist(val browseId: String) : Screen

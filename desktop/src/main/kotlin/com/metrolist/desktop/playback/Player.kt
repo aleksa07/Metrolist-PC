@@ -51,6 +51,10 @@ object Player : AudioEngine.Listener {
     private val _shuffle = MutableStateFlow(false)
     val shuffle: StateFlow<Boolean> = _shuffle.asStateFlow()
     private val _queueTitle = MutableStateFlow<String?>(null)
+
+    /** Id of the track whose audio is decoded and ready (Listen Together reports this as "buffered"). */
+    private val _readyTrackId = MutableStateFlow<String?>(null)
+    val readyTrackId: StateFlow<String?> = _readyTrackId.asStateFlow()
     val queueTitle: StateFlow<String?> = _queueTitle.asStateFlow()
 
     private var loadJob: Job? = null
@@ -100,7 +104,7 @@ object Player : AudioEngine.Listener {
 
     // ---- queue building ----
 
-    fun playQueue(tracks: List<Track>, startIndex: Int = 0, title: String? = null, shuffle: Boolean = false) {
+    fun playQueue(tracks: List<Track>, startIndex: Int = 0, title: String? = null, shuffle: Boolean = false, autoPlay: Boolean = true) {
         if (tracks.isEmpty()) return
         radioEndpoint = null
         radioContinuation = null
@@ -115,7 +119,7 @@ object Player : AudioEngine.Listener {
             start = 0
         }
         _queueTitle.value = title
-        setQueue(list, start.coerceAtLeast(0))
+        setQueue(list, start.coerceAtLeast(0), autoPlay)
     }
 
     /** Plays a single song and fills the queue with its YouTube Music radio, as the Android app does. */
@@ -208,6 +212,14 @@ object Player : AudioEngine.Listener {
         _index.value = q.indexOfFirst { it.id == cur?.id }
     }
 
+    /** Keeps everything up to [current] and replaces what follows (used to mirror a Listen Together host). */
+    fun replaceUpcoming(current: Track, upcoming: List<Track>) {
+        val i = _queue.value.indexOfFirst { it.id == current.id }.takeIf { it >= 0 } ?: return
+        _queue.value = _queue.value.take(i + 1) + upcoming.filter { it.id != current.id }
+        _index.value = i
+        radioEndpoint = null
+    }
+
     fun clearQueue() {
         val cur = _current.value ?: return
         _queue.value = listOf(cur)
@@ -222,11 +234,11 @@ object Player : AudioEngine.Listener {
         load(0, true)
     }
 
-    private fun setQueue(tracks: List<Track>, start: Int) {
+    private fun setQueue(tracks: List<Track>, start: Int, play: Boolean = true) {
         _queue.value = tracks
         _index.value = start
         _current.value = tracks[start]
-        load(0, true)
+        load(0, play)
     }
 
     // ---- transport ----
@@ -313,6 +325,7 @@ object Player : AudioEngine.Listener {
         loadJob?.cancel()
         engine.stop()
         engineLoaded = false
+        _readyTrackId.value = null
         proxyUrl?.let(RangeProxy::unregister)
         _error.value = null
         _buffering.value = true
@@ -356,6 +369,7 @@ object Player : AudioEngine.Listener {
 
     override fun onReady(durationMs: Long) {
         if (durationMs > 0) _duration.value = durationMs
+        scope.launch { _readyTrackId.value = _current.value?.id }
     }
 
     override fun onEnded() {

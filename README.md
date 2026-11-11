@@ -56,6 +56,7 @@
 - Radio / autoplay queue for any song, artist or playlist
 - Seek, shuffle, repeat, queue reordering
 - Media keys, tray controls and keyboard shortcuts
+- Close to the system tray and keep listening (optional)
 
 </td>
     <td width="50%" valign="top">
@@ -84,6 +85,7 @@
 - Save albums, artists and playlists
 - Google sign-in for your YouTube Music account
 - Your YouTube Music playlists
+- Liked songs sync with your YouTube Music account
 
 </td>
   </tr>
@@ -91,6 +93,7 @@
     <td width="50%" valign="top">
 
 #### Social
+- Listen Together: share a room with Metrolist users on PC and Android
 - Last.fm scrobbling, now playing and loves
 - Discord Rich Presence
 
@@ -102,6 +105,7 @@
 - Dynamic colour from the album art
 - Light / Dark / Pure black themes
 - Dark title bar on Windows
+- Fast startup and automatic updates
 
 </td>
   </tr>
