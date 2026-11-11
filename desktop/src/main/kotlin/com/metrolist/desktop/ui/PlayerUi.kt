@@ -390,7 +390,9 @@ fun ExpandedPlayer(nav: Navigator) {
                 val boxH = maxHeight
                 Row(Modifier.fillMaxSize(), verticalAlignment = Alignment.CenterVertically) {
                     Column(Modifier.weight(1f).fillMaxHeight(), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
-                        val artSize = minOf(boxH - 220.dp, if (wide) boxW / 2 - 80.dp else boxW - 80.dp).coerceIn(160.dp, 520.dp)
+                        val showVisualizer = Settings.state.collectAsState().value.showVisualizer
+                        val reserved = if (showVisualizer) 300.dp else 220.dp
+                        val artSize = minOf(boxH - reserved, if (wide) boxW / 2 - 80.dp else boxW - 80.dp).coerceIn(160.dp, 520.dp)
                         Surface(shape = RoundedCornerShape(16.dp), shadowElevation = 24.dp) {
                             AsyncImage(t.thumbnail.resized(1080), null, contentScale = ContentScale.Crop, modifier = Modifier.size(artSize))
                         }
@@ -413,7 +415,7 @@ fun ExpandedPlayer(nav: Navigator) {
                         SeekBar(Modifier.width(artSize + 96.dp), light = true)
                         Spacer(Modifier.height(8.dp))
                         TransportButtons(big = true, light = true)
-                        if (Settings.state.collectAsState().value.showVisualizer) {
+                        if (showVisualizer) {
                             Spacer(Modifier.height(16.dp))
                             Visualizer(MaterialTheme.colorScheme.primary, Modifier.width(artSize + 96.dp).height(56.dp))
                         }

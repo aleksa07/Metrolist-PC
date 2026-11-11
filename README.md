@@ -1,39 +1,25 @@
 <div align="center">
 
-<img src="fastlane/metadata/android/en-US/images/icon.png" alt="Metrolist app icon" width="200" />
+<img src="fastlane/metadata/android/en-US/images/icon.png" alt="Metrolist PC icon" width="200" />
 
-# Metrolist
+# Metrolist PC
 
-### YouTube Music client for Android
-
-<br/>
-
-<a href="https://www.blacksmith.sh">
-  <img src="assets/blacksmith-powered.png" alt="CI powered by Blacksmith" width="280" />
-</a>
-
-<br/>
-<br/>
-
-[![Latest release](https://img.shields.io/github/v/release/MetrolistGroup/Metrolist?style=for-the-badge&labelColor=0d1117)](https://github.com/MetrolistGroup/Metrolist/releases)
-[![License](https://img.shields.io/github/license/MetrolistGroup/metrolist?style=for-the-badge&labelColor=0d1117)](https://github.com/MetrolistGroup/Metrolist/blob/main/LICENSE)
-[![Downloads](https://img.shields.io/github/downloads/MetrolistGroup/Metrolist/total?style=for-the-badge&labelColor=0d1117)](https://github.com/MetrolistGroup/Metrolist/releases)
+### YouTube Music client for Windows, macOS and Linux
 
 <br/>
 
-[![Discord](https://img.shields.io/badge/Discord-%235865F2.svg?style=for-the-badge&logo=discord&logoColor=white&labelColor=0d1117)](https://dsc.gg/metrolist)
-[![Telegram](https://img.shields.io/badge/Telegram-2CA5E0?style=for-the-badge&logo=telegram&logoColor=white&labelColor=0d1117)](https://t.me/metrolistapp)
+[![Latest release](https://img.shields.io/github/v/release/aleksa07/Metrolist-PC?style=for-the-badge&labelColor=0d1117)](https://github.com/aleksa07/Metrolist-PC/releases)
+[![License](https://img.shields.io/github/license/aleksa07/Metrolist-PC?style=for-the-badge&labelColor=0d1117)](https://github.com/aleksa07/Metrolist-PC/blob/desktop/LICENSE)
+[![Downloads](https://img.shields.io/github/downloads/aleksa07/Metrolist-PC/total?style=for-the-badge&labelColor=0d1117)](https://github.com/aleksa07/Metrolist-PC/releases)
 
 <br/>
 
-[**Download**](#download-now) · [**Features**](#features) · [**Translate**](#translations) · [**FAQ**](#faq) · [**Support**](#support-the-project)
+[**Download**](#download-now) · [**Features**](#features) · [**Build**](#build-from-source) · [**Credits**](#special-thanks)
 
 </div>
 
-> [!WARNING]
-> # MAINTENANCE MODE
-> Metrolist is currently in maintenance mode. This means we will only be fixing bugs and making minor improvements. Please do not submit PRs for new features or major changes, as they will not be accepted.  
-> The app is **NOT** dead, please stay tuned for updates on our discord (found above).
+> [!NOTE]
+> Metrolist PC is a desktop port of [Metrolist](https://github.com/MetrolistGroup/Metrolist), the open-source YouTube Music client for Android. It reuses Metrolist's YouTube Music, Last.fm and lyrics code and rebuilds the interface for the desktop.
 
 > [!WARNING]
 > **Regional Restriction** - If YouTube Music is unavailable in your region, this app will not work without a **VPN or proxy** connecting to a supported region.
@@ -44,12 +30,14 @@
 
 <h1><a id="screenshots"></a>Screenshots</h1>
 
-<img src="fastlane/metadata/android/en-US/images/screenshots/screenshot_1.png" alt="Home screen" width="30%" />
-<img src="fastlane/metadata/android/en-US/images/screenshots/screenshot_2.png" alt="Artist screen" width="30%" />
-<img src="fastlane/metadata/android/en-US/images/screenshots/screenshot_3.png" alt="Recognize music screen" width="30%" />
-<img src="fastlane/metadata/android/en-US/images/screenshots/screenshot_4.png" alt="Listen together screen" width="30%" />
-<img src="fastlane/metadata/android/en-US/images/screenshots/screenshot_5.png" alt="Player screen" width="30%" />
-<img src="fastlane/metadata/android/en-US/images/screenshots/screenshot_6.png" alt="Player lyrics screen" width="30%" />
+<img src="assets/desktop/screenshot_1.png" alt="Home screen" width="48%" />
+<img src="assets/desktop/screenshot_4.png" alt="Now playing with synced lyrics and visualizer" width="48%" />
+<img src="assets/desktop/screenshot_3.png" alt="Album screen" width="48%" />
+<img src="assets/desktop/screenshot_5.png" alt="Artist screen" width="48%" />
+<img src="assets/desktop/screenshot_2.png" alt="Search screen" width="48%" />
+<img src="assets/desktop/screenshot_7.png" alt="Home with the queue panel" width="48%" />
+<img src="assets/desktop/screenshot_6.png" alt="Explore screen" width="48%" />
+<img src="assets/desktop/screenshot_8.png" alt="Settings screen" width="48%" />
 
 </div>
 
@@ -65,19 +53,17 @@
 
 #### Playback
 - Stream any song or video from YouTube Music
-- Background playback
-- Download & cache for offline use
-- Skip silence
-- Sleep timer
+- Radio / autoplay queue for any song, artist or playlist
+- Seek, shuffle, repeat, queue reordering
+- Media keys, tray controls and keyboard shortcuts
 
 </td>
     <td width="50%" valign="top">
 
 #### Audio
+- High / auto / low audio quality
 - Audio normalization
-- Tempo & pitch control
-- Equalizer
-- Crossfade
+- Live spectrum visualizer
 
 </td>
   </tr>
@@ -85,21 +71,19 @@
     <td width="50%" valign="top">
 
 #### Lyrics & Discovery
-- Live synced lyrics
-- AI-powered lyrics translation
-- Personalized quick picks
-- Search songs, albums, artists, videos, and playlists
+- Live synced lyrics from LRCLIB, BetterLyrics, KuGou and YouTube Music
+- Personalized quick picks and mood filters
+- Charts, new releases, moods & genres
+- Search songs, albums, artists, videos, playlists and podcasts
 
 </td>
     <td width="50%" valign="top">
 
 #### Library & Account
-- Full library management
-- Local playlists
-- Import playlists
-- Reorder songs in playlist or queue
-- YouTube Music account login
-- Sync songs, artists, albums, and playlists
+- Liked songs, local playlists and listening history
+- Save albums, artists and playlists
+- Google sign-in for your YouTube Music account
+- Your YouTube Music playlists
 
 </td>
   </tr>
@@ -107,18 +91,17 @@
     <td width="50%" valign="top">
 
 #### Social
-- Listen together with friends in real-time
-- Last.fm integration for scrobbling
-- Safe Discord Rich Presence
+- Last.fm scrobbling, now playing and loves
+- Discord Rich Presence
 
 </td>
     <td width="50%" valign="top">
 
 #### Interface
-- Home screen widget
-- Light / Dark / Black / Dynamic theme modes
-- Dynamic color + 19 preset color palettes
-- Built with Material 3
+- Built with Material 3 and Compose Multiplatform
+- Dynamic colour from the album art
+- Light / Dark / Pure black themes
+- Dark title bar on Windows
 
 </td>
   </tr>
@@ -132,142 +115,52 @@
 
 <h1><a id="download-now"></a>Download Now</h1>
 
-<h2>Stable Release</h2>
-
 <table>
   <tr>
-    <th align="center">Obtainium</th>
-    <th align="center">IzzyOnDroid</th>
+    <th align="center">Windows</th>
+    <th align="center">macOS</th>
+    <th align="center">Linux</th>
   </tr>
   <tr>
-    <td align="center">
-      <a href="https://apps.obtainium.imranr.dev/redirect?r=obtainium://add/https://github.com/MetrolistGroup/Metrolist/">
-        <img src="assets/badges/obtainium.svg" alt="Add Metrolist to Obtainium" height="100">
-      </a>
-    </td>
-    <td align="center">
-      <a href="https://apt.izzysoft.de/fdroid/index/apk/com.metrolist.music">
-        <img src="assets/badges/izzyondroid.svg" alt="Get Metrolist on IzzyOnDroid" height="100">
-      </a>
-    </td>
-  </tr>
-  <tr>
-    <th align="center">OpenAPK</th>
-    <th align="center">GitHub</th>
-  </tr>
-  <tr>
-    <td align="center">
-      <a href="https://www.openapk.net/metrolist/com.metrolist.music/">
-        <img src="assets/badges/openapk.svg" alt="Get Metrolist on OpenAPK" height="100">
-      </a>
-    </td>
-    <td align="center">
-      <a href="https://github.com/MetrolistGroup/Metrolist/releases/latest/download/Metrolist.apk">
-        <img src="assets/badges/github-stable.svg" alt="Get the stable Metrolist release on GitHub" height="100">
-      </a>
-    </td>
+    <td align="center"><a href="https://github.com/aleksa07/Metrolist-PC/releases/latest/download/Metrolist-PC-Windows.msi"><b>Metrolist-PC-Windows.msi</b></a></td>
+    <td align="center"><a href="https://github.com/aleksa07/Metrolist-PC/releases/latest/download/Metrolist-PC-macOS.dmg"><b>Metrolist-PC-macOS.dmg</b></a></td>
+    <td align="center"><a href="https://github.com/aleksa07/Metrolist-PC/releases/latest/download/Metrolist-PC-Linux.deb"><b>Metrolist-PC-Linux.deb</b></a></td>
   </tr>
 </table>
 
-<h2>Nightly Build</h2>
-
-<table>
-  <tr>
-    <th align="center">GitHub</th>
-  </tr>
-  <tr>
-    <td align="center">
-      <a href="https://github.com/MetrolistGroup/Metrolist/releases/download/nightly/Metrolist-with-Google-Cast.apk">
-        <img src="assets/badges/github-nightly.svg" alt="Get the Metrolist nightly build on GitHub" height="120">
-      </a>
-    </td>
-  </tr>
-</table>
+<h3>All versions are on the <a href="https://github.com/aleksa07/Metrolist-PC/releases">releases page</a>.</h3>
 
 </div>
+
+> [!TIP]
+> The installers are not code-signed. On Windows, if SmartScreen says "Windows protected your PC", click **More info → Run anyway**. On macOS, right-click the app and choose **Open** the first time.
 
 ---
 
 <div align="center">
 
-<h1><a id="faq"></a>FAQ</h1>
-
-<h3>Got questions? Check out our <a href="https://metrolist.cc/#faq">FAQ page</a> for answers to the most common ones.</h3>
+<h1><a id="build-from-source"></a>Build From Source</h1>
 
 </div>
 
----
+Requires JDK 17 or newer (Gradle downloads JDK 21 for the build automatically).
 
-<div align="center">
-
-<h1><a id="translations"></a>Translations</h1>
-
-[![Translation status](https://img.shields.io/weblate/progress/metrolist?style=for-the-badge&labelColor=0d1117)](https://hosted.weblate.org/engage/metrolist/)
-
-<h3>We use Weblate to translate Metrolist. <a href="https://hosted.weblate.org/projects/Metrolist/">Help us bring Metrolist to more people!</a></h3>
-
-<a href="https://hosted.weblate.org/projects/Metrolist/">
-  <img src="https://hosted.weblate.org/widget/Metrolist/horizontal-auto.svg" alt="Translation status" />
-</a>
-
-<h3>Thank you! Every translation makes Metrolist a little more accessible to someone, somewhere in the world.</h3>
-
-</div>
-
----
-
-<div align="center">
-
-<h1><a id="support-the-project"></a>Support the Project</h1>
-
-<h3>Metrolist is free and open-source. If it brings you joy, consider supporting its development!</h3>
-
-#### Monero (XMR)
-
-<img src="assets/XMR.png" alt="Monero QR code" width="150" />
-
-```text
-44XjSELSWcgJTZiCKzjpCQWyXhokrH9RqH3rpp35FkSKi57T25hniHWHQNhLeXyFn3DDYqufmfRB1iEtENerZpJc7xJCcqt
+```bash
+cd desktop
+./gradlew run             # start the app
+./gradlew packageMsi      # Windows installer (packageDmg on macOS, packageDeb on Linux)
+./gradlew smokeTest       # end-to-end check: search, stream, decode and seek
 ```
 
-#### Buy Me a Coffee
-
-<a href="https://www.buymeacoffee.com/mostafaalagamy">
-  <img src="assets/buymeacoffee.png" alt="Buy Me a Coffee" width="150" />
-</a>
-
-</div>
+Pushing a tag such as `v1.0.1` runs the [Desktop release](.github/workflows/desktop-release.yml) workflow, which builds all three installers and publishes them as a GitHub release.
 
 ---
 
 <div align="center">
 
-<h1>Special Thanks</h1>
+<h1><a id="special-thanks"></a>Special Thanks</h1>
 
-<h3>Metrolist stands on the shoulders of incredible open-source work.</h3>
-
-<h3>Main Inspirations</h3>
-
-<table>
-  <thead>
-    <tr>
-      <th align="center">Project</th>
-      <th align="center">Authors</th>
-    </tr>
-  </thead>
-  <tbody>
-    <tr>
-      <td align="center"><strong>InnerTune</strong></td>
-      <td align="center"><a href="https://github.com/z-huang">Zion Huang</a> · <a href="https://github.com/Malopieds">Malopieds</a></td>
-    </tr>
-    <tr>
-      <td align="center"><strong>OuterTune</strong></td>
-      <td align="center"><a href="https://github.com/DD3Boh">Davide Garberi</a> · <a href="https://github.com/mikooomich">Michael Zh</a></td>
-    </tr>
-  </tbody>
-</table>
-
-<h3>Libraries & Integrations</h3>
+<h3>Metrolist PC stands on the shoulders of incredible open-source work.</h3>
 
 <table>
   <thead>
@@ -278,49 +171,33 @@
   </thead>
   <tbody>
     <tr>
-      <td align="center"><a href="https://better-lyrics.boidu.dev"><strong>Better Lyrics</strong></a></td>
-      <td>Time-synced lyrics with word-by-word highlighting & YouTube Music integration</td>
+      <td align="center"><a href="https://github.com/MetrolistGroup/Metrolist"><strong>Metrolist</strong></a></td>
+      <td>The original Android app by <a href="https://github.com/mostafaalagamy">Mo Agamy</a> and contributors: YouTube Music API layer, Last.fm and lyrics clients</td>
     </tr>
     <tr>
-      <td align="center"><a href="https://github.com/MetrolistGroup/metroserver"><strong>metroserver</strong></a></td>
-      <td>Listen-together real-time backend</td>
+      <td align="center"><a href="https://github.com/MetrolistGroup/innertubex"><strong>InnerTubeX</strong></a></td>
+      <td>Stream extraction and player cipher handling</td>
     </tr>
     <tr>
-      <td align="center"><a href="https://github.com/aleksey-saenko/MusicRecognizer"><strong>MusicRecognizer</strong></a></td>
-      <td>Music recognition feature & Shazam API integration</td>
+      <td align="center"><strong>InnerTune</strong> · <strong>OuterTune</strong></td>
+      <td>The projects Metrolist grew from</td>
+    </tr>
+    <tr>
+      <td align="center"><a href="https://better-lyrics.boidu.dev"><strong>Better Lyrics</strong></a> · <a href="https://lrclib.net"><strong>LRCLIB</strong></a></td>
+      <td>Time-synced lyrics</td>
     </tr>
     <tr>
       <td align="center"><a href="https://github.com/ZemerTeam/zemer-cipher"><strong>zemer-cipher</strong></a></td>
-      <td>YouTube cipher deobfuscation and PoToken generation</td>
+      <td>YouTube cipher deobfuscation</td>
     </tr>
     <tr>
-      <td align="center"><a href="https://www.blacksmith.sh"><strong>Blacksmith</strong></a></td>
-      <td>High-performance GitHub Actions runners powering our CI</td>
+      <td align="center"><a href="https://github.com/bytedeco/javacv"><strong>JavaCV / FFmpeg</strong></a> · <a href="https://www.jetbrains.com/compose-multiplatform/"><strong>Compose Multiplatform</strong></a></td>
+      <td>Audio decoding and the desktop UI toolkit</td>
     </tr>
   </tbody>
 </table>
 
-<br/>
-
-<a href="https://www.blacksmith.sh">
-  <img src="assets/blacksmith-powered.png" alt="CI powered by Blacksmith" width="280" />
-</a>
-
-<h3>We also thank the entire open-source community! For every library, tool, and API that powers this project.</h3>
-
-</div>
-
----
-
-<div align="center">
-
-<h1>Contributors</h1>
-
-<h3>This project wouldn't exist without these amazing people!</h3>
-
-<a href="https://github.com/MetrolistGroup/Metrolist/graphs/contributors">
-  <img src="https://contrib.rocks/image?repo=MetrolistGroup/Metrolist" alt="Contributors" />
-</a>
+<h3>If you enjoy Metrolist, consider <a href="https://github.com/MetrolistGroup/Metrolist#support-the-project">supporting the original project</a>.</h3>
 
 </div>
 
@@ -334,6 +211,8 @@ This project is **not affiliated with, funded, authorized, endorsed by, or in an
 
 All trademarks, service marks, and intellectual property rights referenced in this project belong to their respective owners.
 
+Licensed under the [GNU GPL v3](LICENSE), like Metrolist.
+
 </div>
 
 ---
@@ -342,8 +221,6 @@ All trademarks, service marks, and intellectual property rights referenced in th
 
 <br/>
 
-**Made with ❤️ by [Mo Agamy](https://github.com/mostafaalagamy)**
-
-**This project stands with Palestine 🇵🇸**
+**Desktop port by [aleksa07](https://github.com/aleksa07) · Original Metrolist by [Mo Agamy](https://github.com/mostafaalagamy)**
 
 </div>

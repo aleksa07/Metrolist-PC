@@ -8,7 +8,8 @@ plugins {
 }
 
 group = "com.metrolist.desktop"
-version = "1.0.0"
+// Release builds pass -PappVersion from the git tag (see .github/workflows/desktop-release.yml).
+version = providers.gradleProperty("appVersion").getOrElse("1.0.0")
 
 kotlin {
     jvmToolchain(21)
@@ -88,8 +89,8 @@ compose.desktop {
             )
         nativeDistributions {
             targetFormats(TargetFormat.Msi, TargetFormat.Exe, TargetFormat.Dmg, TargetFormat.Deb)
-            packageName = "Metrolist"
-            packageVersion = "1.0.0"
+            packageName = "Metrolist PC"
+            packageVersion = project.version.toString()
             description = "YouTube Music client for desktop (port of Metrolist)"
             vendor = "Metrolist"
             licenseFile.set(project.file("../LICENSE"))
@@ -103,6 +104,8 @@ compose.desktop {
                 iconFile.set(project.file("icon.ico"))
             }
             linux {
+                packageName = "metrolist-pc"
+                debMaintainer = "aleksa07@users.noreply.github.com"
                 iconFile.set(project.file("src/main/resources/icon.png"))
             }
         }

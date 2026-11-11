@@ -1,0 +1,74 @@
+name: Desktop release
+
+# Builds the Windows, macOS and Linux installers. Pushing a tag like v1.0.1 also publishes them as a GitHub release.
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            task: packageMsi
+            dir: msi
+            asset: Metrolist-PC-Windows.msi
+          - os: macos-latest
+            task: packageDmg
+            dir: dmg
+            asset: Metrolist-PC-macOS.dmg
+          - os: ubuntu-latest
+            task: packageDeb
+            dir: deb
+            asset: Metrolist-PC-Linux.deb
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        shell: bash
+        working-directory: desktop
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Build installer
+        run: |
+          VERSION=1.0.0
+          if [[ "$GITHUB_REF_TYPE" == "tag" ]]; then VERSION="${GITHUB_REF_NAME#v}"; fi
+          ./gradlew ${{ matrix.task }} -PappVersion="$VERSION" --no-configuration-cache
+          mkdir -p dist
+          cp build/compose/binaries/main/${{ matrix.dir }}/* "dist/${{ matrix.asset }}"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.asset }}
+          path: desktop/dist/${{ matrix.asset }}
+
+  release:
+    needs: build
+    if: github.ref_type == 'tag'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+      - uses: softprops/action-gh-release@v2
+        with:
+          name: Metrolist PC ${{ github.ref_name }}
+          files: dist/*
+          generate_release_notes: true
+          body: |
+            ## Download
+            | Windows | macOS | Linux |
+            | --- | --- | --- |
+            | [Metrolist-PC-Windows.msi](https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/Metrolist-PC-Windows.msi) | [Metrolist-PC-macOS.dmg](https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/Metrolist-PC-macOS.dmg) | [Metrolist-PC-Linux.deb](https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/Metrolist-PC-Linux.deb) |
+
+            The installers are not code-signed: Windows SmartScreen may show "Windows protected your PC" (click **More info → Run anyway**), and on macOS right-click the app and choose **Open** the first time.

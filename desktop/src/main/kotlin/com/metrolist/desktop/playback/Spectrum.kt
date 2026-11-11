@@ -40,7 +40,8 @@ class Spectrum(private val size: Int = 2048, val bandCount: Int = 48) {
                 if (m > peak) peak = m
             }
             val db = 20 * log10(peak / (size / 4f) + 1e-9f)
-            val v = ((db + 60f) / 60f).coerceIn(0f, 1f)
+            // Typical music bands sit 25–45 dB below full scale; map -62..-12 dB onto the bar height.
+            val v = ((db + 62f) / 50f).coerceIn(0f, 1f)
             bands[b] = if (v > bands[b]) v else bands[b] * 0.85f + v * 0.15f
         }
     }
