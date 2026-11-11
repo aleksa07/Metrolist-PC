@@ -25,6 +25,18 @@ fun runSmokeTest(queryArg: String?): Unit = runBlocking {
         check(isNewer("1.1.0", "1.0.0") && isNewer("1.0.10", "1.0.9") && !isNewer("1.0.0", "1.0.0") && !isNewer("1.0.0", "1.1.0")) { "version compare" }
     }
     println("update version self-check: ok")
+    with(com.metrolist.desktop.data.LikeSync) {
+        fun t(id: String) = com.metrolist.desktop.data.Track(id, id)
+        val lib = com.metrolist.desktop.data.LibraryData(
+            liked = listOf(t("local"), t("gone"), t("kept")),
+            likedSnapshot = listOf("gone", "kept"),
+            pendingLikes = mapOf("unliked" to false),
+        )
+        val remote = listOf(t("kept"), t("new"), t("unliked"))
+        check(merge(lib, remote, complete = true).liked.map { it.id } == listOf("local", "kept", "new")) { "like merge" }
+        check(merge(lib, remote, complete = false).liked.map { it.id } == listOf("local", "gone", "kept", "new")) { "partial like merge" }
+    }
+    println("like merge self-check: ok")
     YouTube.visitorData = YouTube.visitorData().getOrNull()
     println("visitorData: ${if (YouTube.visitorData != null) "ok" else "missing"}")
 

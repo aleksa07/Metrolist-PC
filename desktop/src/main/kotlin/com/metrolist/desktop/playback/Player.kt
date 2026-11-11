@@ -97,8 +97,11 @@ object Player : AudioEngine.Listener {
         _repeat.value = RepeatMode.entries.getOrElse(snap.repeat) { RepeatMode.OFF }
     }
 
-    fun saveState() {
+    private fun snapshot() =
         QueueStore.update { QueueSnapshot(_queue.value, _index.value.coerceAtLeast(0), _position.value, _repeat.value.ordinal) }
+
+    fun saveState() {
+        snapshot()
         QueueStore.flush()
     }
 
@@ -332,6 +335,7 @@ object Player : AudioEngine.Listener {
         _position.value = startMs
         _duration.value = (track.durationSec ?: 0) * 1000L
         _isPlaying.value = play
+        snapshot() // survives a shutdown or crash that never reaches quit()
         loadJob =
             scope.launch {
                 nativesReady.await()

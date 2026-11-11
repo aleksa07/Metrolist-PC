@@ -18,6 +18,9 @@ import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import timber.log.Timber
 import java.io.File
+import java.nio.file.AtomicMoveNotSupportedException
+import java.nio.file.Files
+import java.nio.file.StandardCopyOption
 import java.util.UUID
 
 private val storeJson =
@@ -49,7 +52,11 @@ open class JsonStore<T>(
 
     private fun load(): T? =
         runCatching { if (file.exists()) storeJson.decodeFromString(serializer, file.readText()) else null }
-            .onFailure { Timber.tag("Store").w(it, "failed to read ${file.name}") }
+            .onFailure {
+                Timber.tag("Store").w(it, "failed to read ${file.name}")
+                // The next save overwrites the file, so keep the unreadable one for recovery.
+                runCatching { file.copyTo(File(file.parentFile, file.name + ".bad"), overwrite = true) }
+            }
             .getOrNull()
 
     @Synchronized
@@ -57,9 +64,11 @@ open class JsonStore<T>(
         runCatching {
             val tmp = File(file.parentFile, file.name + ".tmp")
             tmp.writeText(storeJson.encodeToString(serializer, value))
-            if (!tmp.renameTo(file)) {
-                file.delete()
-                tmp.renameTo(file)
+            // One-step swap: the old file is never missing, even if the app dies mid-save.
+            try {
+                Files.move(tmp.toPath(), file.toPath(), StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE)
+            } catch (_: AtomicMoveNotSupportedException) {
+                Files.move(tmp.toPath(), file.toPath(), StandardCopyOption.REPLACE_EXISTING)
             }
         }.onFailure { Timber.tag("Store").w(it, "failed to write ${file.name}") }
     }
@@ -100,6 +109,8 @@ data class AppSettings(
     val closeToTray: Boolean = true,
     val checkUpdates: Boolean = true,
     val autoInstallUpdates: Boolean = true,
+    /** Version the app last tried to install by itself, so a failing installer is not retried on every start. */
+    val autoInstallTried: String = "",
     val listenTogetherName: String = System.getProperty("user.name").orEmpty().take(24),
     // Discord Rich Presence
     val discordEnabled: Boolean = false,
@@ -122,6 +133,8 @@ data class LibraryData(
     val searchHistory: List<String> = emptyList(),
     /** Liked-song ids seen on the YouTube Music account at the last sync (to detect remote unlikes). */
     val likedSnapshot: List<String> = emptyList(),
+    /** Like (true) / unlike (false) changes not yet confirmed by the account; re-sent at the next sync. */
+    val pendingLikes: Map<String, Boolean> = emptyMap(),
 )
 
 object Library : JsonStore<LibraryData>("library.json", LibraryData.serializer(), { LibraryData() }) {

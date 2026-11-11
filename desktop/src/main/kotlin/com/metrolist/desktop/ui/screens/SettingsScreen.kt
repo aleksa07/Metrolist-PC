@@ -172,7 +172,7 @@ private fun AccountSection(savedCookie: String) {
         com.metrolist.desktop.ui.invalidateLoad("home:null")
         com.metrolist.desktop.ui.invalidateLoad("ytlibrary")
         // A different account must not "unlike" songs based on the previous account's snapshot.
-        com.metrolist.desktop.data.Library.update { it.copy(likedSnapshot = emptyList()) }
+        com.metrolist.desktop.data.Library.update { it.copy(likedSnapshot = emptyList(), pendingLikes = emptyMap()) }
         com.metrolist.desktop.data.LikeSync.syncInBackground()
     }
     Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {

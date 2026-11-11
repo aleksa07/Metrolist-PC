@@ -84,7 +84,11 @@ object Updater {
         }
         available = release
         status = "Version ${release.version} is available"
-        if (Settings.value.autoInstallUpdates) install()
+        if (Settings.value.autoInstallUpdates && Settings.value.autoInstallTried != release.version) {
+            // Remembered before installing: if the installer fails, the next start only shows the banner.
+            Settings.update { it.copy(autoInstallTried = release.version) }
+            install()
+        }
     }
 
     /** Downloads and runs the new installer, then quits so it can replace the app. */

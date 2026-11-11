@@ -61,15 +61,21 @@ jobs:
         with:
           path: dist
           merge-multiple: true
-      - uses: softprops/action-gh-release@v2
-        with:
-          name: Metrolist PC ${{ github.ref_name }}
-          files: dist/*
-          generate_release_notes: true
-          body: |
-            ## Download
-            | Windows | macOS | Linux |
-            | --- | --- | --- |
-            | [Metrolist-PC-Windows.msi](https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/Metrolist-PC-Windows.msi) | [Metrolist-PC-macOS.dmg](https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/Metrolist-PC-macOS.dmg) | [Metrolist-PC-Linux.deb](https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/Metrolist-PC-Linux.deb) |
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          # A re-run (after macOS runners were unavailable) only adds the missing files.
+          if gh release view "$TAG" >/dev/null 2>&1; then gh release upload "$TAG" dist/* --clobber; exit 0; fi
+          BASE="https://github.com/$GH_REPO/releases/download/$TAG"
+          cat > notes.md <<EOF
+          ## Download
+          | Windows | macOS | Linux |
+          | --- | --- | --- |
+          | [Metrolist-PC-Windows.msi]($BASE/Metrolist-PC-Windows.msi) | [Metrolist-PC-macOS.dmg]($BASE/Metrolist-PC-macOS.dmg) | [Metrolist-PC-Linux.deb]($BASE/Metrolist-PC-Linux.deb) |
 
-            The installers are not code-signed: Windows SmartScreen may show "Windows protected your PC" (click **More info → Run anyway**), and on macOS right-click the app and choose **Open** the first time.
+          The installers are not code-signed: Windows SmartScreen may show "Windows protected your PC" (click **More info → Run anyway**), and on macOS right-click the app and choose **Open** the first time.
+          EOF
+          gh release create "$TAG" dist/* --title "Metrolist PC $TAG" --generate-notes --notes-file notes.md
