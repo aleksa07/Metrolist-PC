@@ -66,7 +66,7 @@ import com.metrolist.desktop.ui.trackMenu
 import java.text.DateFormat
 import java.util.Date
 
-private val tabs = listOf("Songs", "Playlists", "Albums", "Artists", "History", "Downloads", "YouTube Music")
+private val tabs = listOf("Songs", "Playlists", "Albums", "Artists", "History", "Downloads", "YouTube Music", "Spotify")
 
 @Composable
 fun LibraryScreen() {
@@ -75,7 +75,7 @@ fun LibraryScreen() {
     val settings by Settings.state.collectAsState()
     var tab by rememberSaveable { mutableIntStateOf(0) }
     var creating by remember { mutableStateOf(false) }
-    val visibleTabs = if (settings.cookie.isBlank()) tabs.dropLast(1) else tabs
+    val visibleTabs = tabs.filter { (it != "YouTube Music" || settings.cookie.isNotBlank()) && (it != "Spotify" || settings.spotifyCookie.isNotBlank()) }
     Column {
         Row(Modifier.padding(horizontal = 24.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
             Text("Library", style = MaterialTheme.typography.displaySmall, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
@@ -165,6 +165,7 @@ fun LibraryScreen() {
                 }
             }
             "YouTube Music" -> YouTubeLibrary()
+            "Spotify" -> SpotifyLibrary()
         }
     }
     if (creating) {
@@ -197,6 +198,23 @@ private fun YouTubeLibrary() {
                 Text("Playlists from your YouTube Music account", style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(8.dp))
             }
             items(page.items, key = { it.id }) { ItemCard(it, nav) }
+        }
+    }
+}
+
+@Composable
+private fun SpotifyLibrary() {
+    val nav = LocalNavigator.current
+    val loader = rememberLoad("spotify:playlists") { com.metrolist.desktop.integrations.Spotify.playlists() }
+    LoadView(loader) { playlists ->
+        LazyVerticalGrid(GridCells.Adaptive(180.dp), contentPadding = screenPadding) {
+            item(span = { GridItemSpan(maxLineSpan) }) {
+                Text("Your Spotify library • songs play from YouTube Music (experimental)", style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(8.dp))
+            }
+            item { Tile(null, "Liked Songs", "Spotify", RoundedCornerShape(8.dp)) { nav.push(Screen.SpotifyPlaylist(null, "Liked Songs")) } }
+            items(playlists, key = { it.id }) { pl ->
+                Tile(pl.thumbnail, pl.name, pl.owner ?: "Spotify", RoundedCornerShape(8.dp)) { nav.push(Screen.SpotifyPlaylist(pl.id, pl.name)) }
+            }
         }
     }
 }

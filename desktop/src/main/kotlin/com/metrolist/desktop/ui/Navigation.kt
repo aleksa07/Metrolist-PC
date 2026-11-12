@@ -25,6 +25,9 @@ sealed interface Screen {
     data class Browse(val browseId: String, val params: String?, val title: String?) : Screen
     data class ArtistItems(val endpoint: BrowseEndpoint, val title: String) : Screen
     data object Charts : Screen
+
+    /** A Spotify playlist; [id] null is Liked Songs. */
+    data class SpotifyPlaylist(val id: String?, val name: String) : Screen
 }
 
 class Navigator {

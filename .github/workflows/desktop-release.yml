@@ -42,7 +42,8 @@ jobs:
       - name: Build installer
         run: |
           VERSION=1.0.0
-          if [[ "$GITHUB_REF_TYPE" == "tag" ]]; then VERSION="${GITHUB_REF_NAME#v}"; fi
+          # Installers need a plain x.y.z: v1.4.0-exp.1 builds as 1.4.0.
+          if [[ "$GITHUB_REF_TYPE" == "tag" ]]; then VERSION="${GITHUB_REF_NAME#v}"; VERSION="${VERSION%%-*}"; fi
           ./gradlew ${{ matrix.task }} -PappVersion="$VERSION" --no-configuration-cache
           mkdir -p dist
           cp build/compose/binaries/main/${{ matrix.dir }}/* "dist/${{ matrix.asset }}"
@@ -78,4 +79,6 @@ jobs:
 
           The installers are not code-signed: Windows SmartScreen may show "Windows protected your PC" (click **More info → Run anyway**), and on macOS right-click the app and choose **Open** the first time.
           EOF
-          gh release create "$TAG" dist/* --title "Metrolist PC $TAG" --generate-notes --notes-file notes.md
+          # A tag with a suffix (v1.4.0-exp.1) is a prerelease, which the in-app updater never offers.
+          PRE=""; [[ "$TAG" == *-* ]] && PRE="--prerelease"
+          gh release create "$TAG" dist/* --title "Metrolist PC $TAG" --generate-notes --notes-file notes.md $PRE

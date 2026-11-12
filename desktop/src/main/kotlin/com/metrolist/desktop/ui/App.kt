@@ -190,6 +190,7 @@ private fun ScreenHost(nav: Navigator) {
                     is Screen.Artist -> ArtistScreen(screen)
                     is Screen.Playlist -> PlaylistScreen(screen)
                     is Screen.LocalPlaylist -> LocalPlaylistScreen(screen)
+                    is Screen.SpotifyPlaylist -> com.metrolist.desktop.ui.screens.SpotifyPlaylistScreen(screen)
                     is Screen.Browse -> BrowseScreen(screen)
                     is Screen.ArtistItems -> ArtistItemsScreen(screen)
                 }

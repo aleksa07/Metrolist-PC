@@ -467,3 +467,30 @@ fun AddToPlaylistDialog() {
         confirmButton = { TextButton(onClick = { Ui.addToPlaylist = null }) { Text("Cancel") } },
     )
 }
+
+@Composable
+fun SpotifyPlaylistScreen(screen: Screen.SpotifyPlaylist) {
+    val nav = LocalNavigator.current
+    val loader = rememberLoad("spotify:${screen.id}") { com.metrolist.desktop.integrations.Spotify.tracks(screen.id) }
+    LoadView(loader) { tracks ->
+        LazyColumn(contentPadding = screenPadding) {
+            item {
+                CollectionHeader(tracks.firstOrNull()?.thumbnail, "Spotify playlist", screen.name, "Plays from YouTube Music", totalDuration(tracks)) {
+                    PlayShuffleButtons({ Player.playQueue(tracks, 0, screen.name) }, { Player.playQueue(tracks, 0, screen.name, shuffle = true) })
+                    MoreButton({
+                        listOf(
+                            MenuEntry("Add to queue", Icons.AutoMirrored.Filled.QueueMusic) { Player.addToQueue(tracks) },
+                            MenuEntry("Save as local playlist", Icons.Default.BookmarkAdd) {
+                                nav.push(Screen.LocalPlaylist(Library.createPlaylist(screen.name, tracks)))
+                            },
+                        )
+                    })
+                }
+            }
+            if (tracks.isEmpty()) item { Text("This playlist is empty.", Modifier.padding(16.dp), color = MaterialTheme.colorScheme.onSurfaceVariant) }
+            itemsIndexed(tracks, key = { i, t -> "$i:${t.id}" }) { i, t ->
+                TrackRow(t, onClick = { Player.playQueue(tracks, i, screen.name) }, menu = { trackMenu(nav, t) })
+            }
+        }
+    }
+}

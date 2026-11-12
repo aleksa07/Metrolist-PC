@@ -1,5 +1,6 @@
 package com.metrolist.desktop.playback
 
+import com.metrolist.desktop.integrations.Spotify
 import com.metrolist.desktop.data.Library
 import com.metrolist.desktop.data.QueueSnapshot
 import com.metrolist.desktop.data.QueueStore
@@ -384,24 +385,35 @@ object Player : AudioEngine.Listener {
         loadJob =
             scope.launch {
                 nativesReady.await()
-                val src =
-                    source(track).getOrElse {
-                        Timber.tag("Player").e(it, "resolve failed for ${track.id}")
-                        _error.value = "Can't play \"${track.title}\": ${it.message ?: it::class.simpleName}"
-                        _buffering.value = false
-                        _isPlaying.value = false
-                        return@launch
-                    }
-                if (_current.value?.id != track.id) return@launch RangeProxy.unregister(src.url)
+                fun fail(e: Throwable) {
+                    Timber.tag("Player").e(e, "resolve failed for ${track.id}")
+                    _error.value = "Can't play \"${track.title}\": ${e.message ?: e::class.simpleName}"
+                    _buffering.value = false
+                    _isPlaying.value = false
+                }
+                val playing = resolved(track).getOrElse { return@launch fail(it) }
+                val src = source(playing).getOrElse { return@launch fail(it) }
+                if (_current.value?.id != playing.id) return@launch RangeProxy.unregister(src.url)
                 stream = src.stream
                 proxyUrl = src.url
                 engine.normalizationGain = gainFor(src)
                 engine.load(src.url, src.entry, startMs, play)
                 engineLoaded = true
-                if (Settings.value.recordHistory) Library.addHistory(track)
+                if (Settings.value.recordHistory) Library.addHistory(playing)
                 extendRadioIfNeeded()
                 prefetchNext()
             }
+    }
+
+    /** Spotify songs are matched to YouTube Music only when they are about to play; the match replaces them in the queue. */
+    private suspend fun resolved(track: Track): Result<Track> {
+        if (!Spotify.isPlaceholder(track)) return Result.success(track)
+        val yt = Spotify.match(track).getOrElse { return Result.failure(it) }
+        fun List<Track>.swap() = map { if (it.id == track.id) yt else it }
+        _queue.value = _queue.value.swap()
+        unshuffled = unshuffled?.swap()
+        if (_current.value?.id == track.id) _current.value = yt
+        return Result.success(yt)
     }
 
     private suspend fun source(track: Track): Result<Source> {
@@ -428,6 +440,8 @@ object Player : AudioEngine.Listener {
         preparedFor = next.id
         scope.launch {
             // A failed resolve leaves preparedFor set: no retry storm, the track just loads normally at the end.
+            // A Spotify song comes back as a different track; the poll loop then prepares that one.
+            if (resolved(next).getOrNull()?.id != next.id) return@launch
             val src = source(next).getOrNull() ?: return@launch
             if (preparedFor != next.id) return@launch RangeProxy.unregister(src.url)
             preparedSource = src
@@ -443,7 +457,7 @@ object Player : AudioEngine.Listener {
     }
 
     private fun prefetchNext() {
-        val next = _queue.value.getOrNull(_index.value + 1) ?: return
+        val next = _queue.value.getOrNull(_index.value + 1)?.takeUnless(Spotify::isPlaceholder) ?: return
         scope.launch {
             delay(5000)
             StreamResolver.resolve(next.id, Settings.value.audioQuality)

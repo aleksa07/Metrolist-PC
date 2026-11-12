@@ -125,6 +125,8 @@ data class AppSettings(
     /** Gain in dB for each of Equalizer.FREQS. */
     val eqGains: List<Float> = listOf(0f, 0f, 0f, 0f, 0f),
     val macMediaControls: Boolean = false,
+    /** Spotify sp_dc sign-in cookie (experimental Spotify library). */
+    val spotifyCookie: String = "",
 )
 
 object Settings : JsonStore<AppSettings>("settings.json", AppSettings.serializer(), { AppSettings() })
@@ -145,6 +147,8 @@ data class LibraryData(
     /** Like (true) / unlike (false) changes not yet confirmed by the account; re-sent at the next sync. */
     val pendingLikes: Map<String, Boolean> = emptyMap(),
     val downloads: List<DownloadedTrack> = emptyList(),
+    /** Spotify track id -> the YouTube Music song it plays as. */
+    val spotifyMatches: Map<String, Track> = emptyMap(),
 )
 
 object Library : JsonStore<LibraryData>("library.json", LibraryData.serializer(), { LibraryData() }) {

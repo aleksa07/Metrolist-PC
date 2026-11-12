@@ -10,6 +10,7 @@ import com.metrolist.innertube.models.SongItem
 import kotlinx.coroutines.runBlocking
 import java.util.concurrent.CountDownLatch
 import kotlin.system.exitProcess
+import kotlinx.coroutines.flow.first
 
 object SmokeTest {
     @JvmStatic
@@ -46,8 +47,20 @@ fun runSmokeTest(queryArg: String?): Unit = runBlocking {
         f.delete()
     }
     println("backup self-check: ok")
+    com.metrolist.desktop.integrations.Spotify.selfCheck()
+    println("spotify self-check: ok")
     YouTube.visitorData = YouTube.visitorData().getOrNull()
     println("visitorData: ${if (YouTube.visitorData != null) "ok" else "missing"}")
+    // Informational only: Spotify being down must not fail the YouTube checks. Anonymous token, public playlist.
+    com.metrolist.desktop.integrations.Spotify.tracks("37i9dQZF1DXcBWIGoYBM5M", cookie = "").fold(
+        { sp ->
+            println("spotify playlist: ${sp.size} songs, first: ${sp.firstOrNull()?.let { "${it.title} - ${it.artistText} (${it.durationSec}s)" }}")
+            sp.firstOrNull()?.let { com.metrolist.desktop.integrations.Spotify.match(it) }
+                ?.onSuccess { println("spotify match: ${it.title} - ${it.artistText} (${it.id})") }
+                ?.onFailure { println("spotify match failed: ${it.message}") }
+        },
+        { println("spotify playlist failed: ${it.message}") },
+    )
 
     val home = YouTube.home().getOrNull()
     println("home sections: ${home?.sections?.size} ${home?.sections?.take(3)?.map { it.title }}")
@@ -107,5 +120,14 @@ fun runSmokeTest(queryArg: String?): Unit = runBlocking {
     engine.stop()
     local.delete()
     done.countDown()
-    exitProcess(if (failure == null && seekOk && handedOver && after in 500..6000) 0 else 1)
+    // A Spotify song in the queue is matched when it plays and swapped for the YouTube Music song.
+    val placeholder = com.metrolist.desktop.data.Track("spotify:smoke", "One More Time", listOf(com.metrolist.desktop.data.ArtistRef("Daft Punk")), durationSec = 320)
+    com.metrolist.desktop.playback.Player.setVolume(0f)
+    com.metrolist.desktop.playback.Player.playQueue(listOf(placeholder))
+    val swapped = kotlinx.coroutines.withTimeoutOrNull(90_000) {
+        com.metrolist.desktop.playback.Player.readyTrackId.first { it != null && !it.startsWith("spotify:") }
+    }
+    println("spotify placeholder plays as: $swapped, queue=${com.metrolist.desktop.playback.Player.queue.value.map { it.id }}")
+    com.metrolist.desktop.playback.Player.pause()
+    exitProcess(if (failure == null && seekOk && handedOver && after in 500..6000 && swapped != null) 0 else 1)
 }

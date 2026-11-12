@@ -109,6 +109,7 @@ object Backup {
             lastfmSecret = from.lastfmSecret,
             lastfmSession = from.lastfmSession,
             lastfmUser = from.lastfmUser,
+            spotifyCookie = from.spotifyCookie,
             autoInstallTried = from.autoInstallTried,
             outputDevice = from.outputDevice,
         )

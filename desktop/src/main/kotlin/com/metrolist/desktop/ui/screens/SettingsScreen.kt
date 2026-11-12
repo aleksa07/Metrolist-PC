@@ -226,6 +226,8 @@ fun SettingsScreen() {
 
         Group("Discord") { DiscordSection(s) }
 
+        Group("Spotify (experimental)") { SpotifySection(s.spotifyCookie) }
+
         Group("Account") {
             AccountSection(s.cookie)
         }
@@ -347,6 +349,51 @@ private fun AccountSection(savedCookie: String) {
                 if (savedCookie.isNotBlank()) OutlinedButton(onClick = { Ui.copy(savedCookie) }) { Text("Copy token") }
             }
         }
+    }
+}
+
+@Composable
+private fun SpotifySection(cookie: String) {
+    val scope = androidx.compose.runtime.rememberCoroutineScope()
+    var status by remember { mutableStateOf<String?>(null) }
+    var busy by remember { mutableStateOf(false) }
+    Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        Text(
+            "Show your Spotify playlists and liked songs in the Library. Spotify only supplies the song list: every song is found on YouTube Music and plays from there, so a free Spotify account is enough. " +
+                "This uses Spotify's unofficial web-player API and may stop working at any time.",
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        if (cookie.isNotBlank()) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text("Connected to Spotify", style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
+                OutlinedButton(onClick = {
+                    com.metrolist.desktop.integrations.GoogleLogin.signOut()
+                    com.metrolist.desktop.integrations.Spotify.signOut()
+                    com.metrolist.desktop.ui.invalidateLoad("spotify:playlists")
+                }) { Text("Disconnect") }
+            }
+        } else {
+            Button(enabled = !busy, onClick = {
+                busy = true
+                status = null
+                scope.launch {
+                    runCatching { com.metrolist.desktop.integrations.GoogleLogin.signInSpotify { msg -> status = msg } }
+                        .onSuccess { c ->
+                            if (c == null) {
+                                status = "Sign-in cancelled"
+                            } else {
+                                Settings.update { it.copy(spotifyCookie = c) }
+                                com.metrolist.desktop.ui.invalidateLoad("spotify:playlists")
+                                status = "Connected. Your playlists are in Library, under Spotify."
+                            }
+                        }
+                        .onFailure { status = "Sign-in failed: ${it.message}" }
+                    busy = false
+                }
+            }) { Text(if (busy) "Signing in…" else "Sign in to Spotify") }
+        }
+        status?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
     }
 }
 
