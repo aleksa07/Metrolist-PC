@@ -49,6 +49,13 @@ fun runSmokeTest(queryArg: String?): Unit = runBlocking {
     println("backup self-check: ok")
     com.metrolist.desktop.integrations.Spotify.selfCheck()
     println("spotify self-check: ok")
+    com.metrolist.desktop.integrations.SoundCloud.selfCheck()
+    println("soundcloud self-check: ok")
+    // Informational: a public playlist big enough that most tracks come back as bare ids.
+    com.metrolist.desktop.integrations.SoundCloud.tracks("545610837").fold(
+        { println("soundcloud playlist: ${it.size} tracks, first: ${it.firstOrNull()?.let { t -> "${t.title} - ${t.artistText} (${t.durationSec}s)" }}") },
+        { println("soundcloud playlist failed: ${it.message}") },
+    )
     YouTube.visitorData = YouTube.visitorData().getOrNull()
     println("visitorData: ${if (YouTube.visitorData != null) "ok" else "missing"}")
     // Informational only: Spotify being down must not fail the YouTube checks. Anonymous token, public playlist.
@@ -128,6 +135,12 @@ fun runSmokeTest(queryArg: String?): Unit = runBlocking {
         com.metrolist.desktop.playback.Player.readyTrackId.first { it != null && !it.startsWith("spotify:") }
     }
     println("spotify placeholder plays as: $swapped, queue=${com.metrolist.desktop.playback.Player.queue.value.map { it.id }}")
+    // A SoundCloud song plays its own HLS stream.
+    com.metrolist.desktop.playback.Player.playQueue(listOf(com.metrolist.desktop.data.Track("soundcloud:293", "Flickermood", durationSec = 213)))
+    val scReady = kotlinx.coroutines.withTimeoutOrNull(60_000) { com.metrolist.desktop.playback.Player.readyTrackId.first { it == "soundcloud:293" } }
+    Thread.sleep(3000)
+    val scPos = com.metrolist.desktop.playback.Player.position.value
+    println("soundcloud plays: ready=${scReady != null} position after 3 s=$scPos ms error=${com.metrolist.desktop.playback.Player.error.value}")
     com.metrolist.desktop.playback.Player.pause()
-    exitProcess(if (failure == null && seekOk && handedOver && after in 500..6000 && swapped != null) 0 else 1)
+    exitProcess(if (failure == null && seekOk && handedOver && after in 500..6000 && swapped != null && scReady != null && scPos > 500) 0 else 1)
 }

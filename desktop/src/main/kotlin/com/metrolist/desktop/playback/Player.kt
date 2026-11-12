@@ -420,6 +420,7 @@ object Player : AudioEngine.Listener {
         com.metrolist.desktop.data.Downloads.entry(track.id)?.let { d ->
             return Result.success(Source(com.metrolist.desktop.data.Downloads.file(track.id).absolutePath, null, null, d.loudnessDb))
         }
+        if (com.metrolist.desktop.integrations.SoundCloud.isTrack(track)) return com.metrolist.desktop.integrations.SoundCloud.stream(track).map { Source(it, null, null, null) }
         return StreamResolver.resolve(track.id, Settings.value.audioQuality).map {
             val (url, entry) = RangeProxy.register(it)
             Source(url, entry, it, it.loudnessDb)
@@ -457,7 +458,7 @@ object Player : AudioEngine.Listener {
     }
 
     private fun prefetchNext() {
-        val next = _queue.value.getOrNull(_index.value + 1)?.takeUnless(Spotify::isPlaceholder) ?: return
+        val next = _queue.value.getOrNull(_index.value + 1)?.takeUnless { ':' in it.id } ?: return
         scope.launch {
             delay(5000)
             StreamResolver.resolve(next.id, Settings.value.audioQuality)

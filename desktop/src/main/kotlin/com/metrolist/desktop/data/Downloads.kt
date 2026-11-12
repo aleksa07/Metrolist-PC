@@ -110,6 +110,7 @@ object Backup {
             lastfmSession = from.lastfmSession,
             lastfmUser = from.lastfmUser,
             spotifyCookie = from.spotifyCookie,
+            soundcloudToken = from.soundcloudToken,
             autoInstallTried = from.autoInstallTried,
             outputDevice = from.outputDevice,
         )

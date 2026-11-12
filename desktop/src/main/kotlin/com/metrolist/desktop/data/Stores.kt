@@ -127,6 +127,7 @@ data class AppSettings(
     val macMediaControls: Boolean = false,
     /** Spotify sp_dc sign-in cookie (experimental Spotify library). */
     val spotifyCookie: String = "",
+    val soundcloudToken: String = "",
 )
 
 object Settings : JsonStore<AppSettings>("settings.json", AppSettings.serializer(), { AppSettings() })

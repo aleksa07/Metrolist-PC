@@ -21,7 +21,7 @@ object LikeSync {
     private val signedIn get() = Settings.value.cookie.isNotBlank()
 
     fun push(track: Track, liked: Boolean) {
-        if (!signedIn || com.metrolist.desktop.integrations.Spotify.isPlaceholder(track)) return
+        if (!signedIn || ':' in track.id) return // Spotify and SoundCloud songs aren't YouTube Music songs
         // Recorded first, so a change that fails (offline) is sent again at the next sync.
         Library.update { it.copy(pendingLikes = it.pendingLikes + (track.id to liked)) }
         scope.launch { send(track.id, liked) }

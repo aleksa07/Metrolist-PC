@@ -26,8 +26,8 @@ sealed interface Screen {
     data class ArtistItems(val endpoint: BrowseEndpoint, val title: String) : Screen
     data object Charts : Screen
 
-    /** A Spotify playlist; [id] null is Liked Songs. */
-    data class SpotifyPlaylist(val id: String?, val name: String) : Screen
+    /** A Spotify or SoundCloud playlist; [id] null is the liked songs. */
+    data class SpotifyPlaylist(val id: String?, val name: String, val service: String = "Spotify") : Screen
 }
 
 class Navigator {

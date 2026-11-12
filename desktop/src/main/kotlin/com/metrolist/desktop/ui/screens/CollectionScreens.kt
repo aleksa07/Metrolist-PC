@@ -471,11 +471,14 @@ fun AddToPlaylistDialog() {
 @Composable
 fun SpotifyPlaylistScreen(screen: Screen.SpotifyPlaylist) {
     val nav = LocalNavigator.current
-    val loader = rememberLoad("spotify:${screen.id}") { com.metrolist.desktop.integrations.Spotify.tracks(screen.id) }
+    val soundcloud = screen.service == "SoundCloud"
+    val loader = rememberLoad("${screen.service}:${screen.id}") {
+        if (soundcloud) com.metrolist.desktop.integrations.SoundCloud.tracks(screen.id) else com.metrolist.desktop.integrations.Spotify.tracks(screen.id)
+    }
     LoadView(loader) { tracks ->
         LazyColumn(contentPadding = screenPadding) {
             item {
-                CollectionHeader(tracks.firstOrNull()?.thumbnail, "Spotify playlist", screen.name, "Plays from YouTube Music", totalDuration(tracks)) {
+                CollectionHeader(tracks.firstOrNull()?.thumbnail, "${screen.service} playlist", screen.name, if (soundcloud) "Plays from SoundCloud" else "Plays from YouTube Music", totalDuration(tracks)) {
                     PlayShuffleButtons({ Player.playQueue(tracks, 0, screen.name) }, { Player.playQueue(tracks, 0, screen.name, shuffle = true) })
                     MoreButton({
                         listOf(

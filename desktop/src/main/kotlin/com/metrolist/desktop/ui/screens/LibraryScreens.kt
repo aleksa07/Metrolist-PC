@@ -66,7 +66,7 @@ import com.metrolist.desktop.ui.trackMenu
 import java.text.DateFormat
 import java.util.Date
 
-private val tabs = listOf("Songs", "Playlists", "Albums", "Artists", "History", "Downloads", "YouTube Music", "Spotify")
+private val tabs = listOf("Songs", "Playlists", "Albums", "Artists", "History", "Downloads", "YouTube Music", "Spotify", "SoundCloud")
 
 @Composable
 fun LibraryScreen() {
@@ -75,7 +75,7 @@ fun LibraryScreen() {
     val settings by Settings.state.collectAsState()
     var tab by rememberSaveable { mutableIntStateOf(0) }
     var creating by remember { mutableStateOf(false) }
-    val visibleTabs = tabs.filter { (it != "YouTube Music" || settings.cookie.isNotBlank()) && (it != "Spotify" || settings.spotifyCookie.isNotBlank()) }
+    val visibleTabs = tabs.filter { (it != "YouTube Music" || settings.cookie.isNotBlank()) && (it != "Spotify" || settings.spotifyCookie.isNotBlank()) && (it != "SoundCloud" || settings.soundcloudToken.isNotBlank()) }
     Column {
         Row(Modifier.padding(horizontal = 24.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
             Text("Library", style = MaterialTheme.typography.displaySmall, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
@@ -166,6 +166,7 @@ fun LibraryScreen() {
             }
             "YouTube Music" -> YouTubeLibrary()
             "Spotify" -> SpotifyLibrary()
+            "SoundCloud" -> SpotifyLibrary("SoundCloud")
         }
     }
     if (creating) {
@@ -203,17 +204,19 @@ private fun YouTubeLibrary() {
 }
 
 @Composable
-private fun SpotifyLibrary() {
+private fun SpotifyLibrary(service: String = "Spotify") {
     val nav = LocalNavigator.current
-    val loader = rememberLoad("spotify:playlists") { com.metrolist.desktop.integrations.Spotify.playlists() }
+    val loader = rememberLoad("$service:playlists") {
+        if (service == "SoundCloud") com.metrolist.desktop.integrations.SoundCloud.playlists() else com.metrolist.desktop.integrations.Spotify.playlists()
+    }
     LoadView(loader) { playlists ->
         LazyVerticalGrid(GridCells.Adaptive(180.dp), contentPadding = screenPadding) {
             item(span = { GridItemSpan(maxLineSpan) }) {
-                Text("Your Spotify library • songs play from YouTube Music (experimental)", style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(8.dp))
+                Text(if (service == "SoundCloud") "Your SoundCloud library (experimental)" else "Your Spotify library • songs play from YouTube Music (experimental)", style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(8.dp))
             }
-            item { Tile(null, "Liked Songs", "Spotify", RoundedCornerShape(8.dp)) { nav.push(Screen.SpotifyPlaylist(null, "Liked Songs")) } }
+            item { Tile(null, "Liked Songs", service, RoundedCornerShape(8.dp)) { nav.push(Screen.SpotifyPlaylist(null, "Liked Songs", service)) } }
             items(playlists, key = { it.id }) { pl ->
-                Tile(pl.thumbnail, pl.name, pl.owner ?: "Spotify", RoundedCornerShape(8.dp)) { nav.push(Screen.SpotifyPlaylist(pl.id, pl.name)) }
+                Tile(pl.thumbnail, pl.name, pl.owner ?: service, RoundedCornerShape(8.dp)) { nav.push(Screen.SpotifyPlaylist(pl.id, pl.name, service)) }
             }
         }
     }

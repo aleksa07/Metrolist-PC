@@ -46,6 +46,12 @@ object GoogleLogin {
             cookies.firstOrNull { it.first == "sp_dc" }?.second
         }
 
+    /** Returns the SoundCloud oauth_token cookie, or null if the user closed the window. */
+    suspend fun signInSoundCloud(onProgress: (String) -> Unit): String? =
+        capture("https://soundcloud.com/signin", "Sign in to SoundCloud", "https://soundcloud.com", onProgress) { cookies ->
+            cookies.firstOrNull { it.first == "oauth_token" }?.second
+        }
+
     /** Opens [url]; once a page under [site] has loaded, [extract] turns its cookies into the result (null = keep waiting). */
     private suspend fun capture(url: String, title: String, site: String, onProgress: (String) -> Unit, extract: (List<Pair<String, String>>) -> String?): String? {
         val cef =
