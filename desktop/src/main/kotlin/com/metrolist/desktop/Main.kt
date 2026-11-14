@@ -45,6 +45,7 @@ fun main(args: Array<String>) {
         System.setErr(log)
         return runSmokeTest(null)
     }
+    if (alreadyRunning()) return
     // Building the YouTube client (HTTP stack, JSON) takes ~0.5 s; do it off the UI thread.
     Thread({ applyAccountSettings() }, "youtube-init").start()
     Ui.scope.launch(kotlinx.coroutines.Dispatchers.IO) {
@@ -137,8 +138,47 @@ fun main(args: Array<String>) {
                 val surface = androidx.compose.material3.MaterialTheme.colorScheme.surface
                 androidx.compose.runtime.LaunchedEffect(surface) { com.metrolist.desktop.ui.TitleBar.apply(window, surface) }
                 androidx.compose.runtime.LaunchedEffect(Unit) { com.metrolist.desktop.integrations.MediaControls.start(window.windowHandle) }
+                androidx.compose.runtime.LaunchedEffect(Unit) {
+                    for (ping in showRequests) {
+                        show()
+                        window.toFront()
+                    }
+                }
                 App(appState)
             }
         }
     }
+}
+
+private val showRequests = kotlinx.coroutines.channels.Channel<Unit>(kotlinx.coroutines.channels.Channel.CONFLATED)
+private const val HELLO = "metrolist"
+
+/**
+ * One running copy per user: a second launch asks the first to show its window, then exits.
+ * shortcut: two launches in the same instant can both start, add a file lock if that shows up.
+ */
+private fun alreadyRunning(): Boolean {
+    val portFile = AppDirs.file("instance.port")
+    val loopback = java.net.InetAddress.getLoopbackAddress()
+    val answered =
+        runCatching {
+            java.net.Socket().use { s ->
+                s.connect(java.net.InetSocketAddress(loopback, portFile.readText().trim().toInt()), 1000)
+                s.soTimeout = 1000
+                // Only our own app answers with HELLO; a stale port now owned by something else doesn't count.
+                s.getInputStream().readNBytes(HELLO.length).decodeToString() == HELLO
+            }
+        }.getOrDefault(false)
+    if (answered) return true
+    val server = runCatching { java.net.ServerSocket(0, 10, loopback) }.getOrNull() ?: return false
+    portFile.writeText(server.localPort.toString())
+    Thread({
+        while (true) {
+            runCatching {
+                server.accept().use { it.getOutputStream().write(HELLO.toByteArray()) }
+                showRequests.trySend(Unit)
+            }
+        }
+    }, "single-instance").apply { isDaemon = true }.start()
+    return false
 }

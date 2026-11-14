@@ -51,6 +51,7 @@ import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Popup
@@ -92,6 +93,7 @@ fun SearchBox(focusRequester: FocusRequester, onFocus: (Boolean) -> Unit, modifi
     var text by remember { mutableStateOf("") }
     var focused by remember { mutableStateOf(false) }
     var suggestions by remember { mutableStateOf<SearchSuggestions?>(null) }
+    var fieldSize by remember { mutableStateOf(androidx.compose.ui.unit.IntSize.Zero) }
     val lib by Library.state.collectAsState()
     val current = nav.current
     LaunchedEffect(current) { text = if (current is Screen.Search) current.query else "" }
@@ -131,6 +133,7 @@ fun SearchBox(focusRequester: FocusRequester, onFocus: (Boolean) -> Unit, modifi
             modifier =
                 Modifier
                     .fillMaxWidth()
+                    .onSizeChanged { fieldSize = it }
                     .focusRequester(focusRequester)
                     .onFocusChanged {
                         focused = it.isFocused
@@ -150,8 +153,9 @@ fun SearchBox(focusRequester: FocusRequester, onFocus: (Boolean) -> Unit, modifi
         val s = suggestions
         val showHistory = text.isBlank() && lib.searchHistory.isNotEmpty()
         if (focused && (showHistory || (s != null && (s.queries.isNotEmpty() || s.recommendedItems.isNotEmpty())))) {
-            Popup(offset = IntOffset(0, 150), properties = PopupProperties(focusable = false), onDismissRequest = { focused = false }) {
-                Surface(shape = RoundedCornerShape(16.dp), tonalElevation = 8.dp, shadowElevation = 12.dp, modifier = Modifier.widthIn(min = 420.dp, max = 640.dp)) {
+            // Anchored just under the field; a fixed pixel offset drifted with window size and display scaling.
+            Popup(offset = IntOffset(0, fieldSize.height + 8), properties = PopupProperties(focusable = false), onDismissRequest = { focused = false }) {
+                Surface(shape = RoundedCornerShape(16.dp), tonalElevation = 8.dp, shadowElevation = 12.dp, modifier = Modifier.width(with(androidx.compose.ui.platform.LocalDensity.current) { fieldSize.width.toDp() })) {
                     LazyColumn(Modifier.heightIn(max = 520.dp).padding(vertical = 8.dp)) {
                         if (showHistory) {
                             items(lib.searchHistory.take(10)) { q ->
