@@ -40,6 +40,13 @@ fun runSmokeTest(queryArg: String?): Unit = runBlocking {
         check(merge(lib, remote, complete = false).liked.map { it.id } == listOf("local", "gone", "kept", "new")) { "partial like merge" }
     }
     println("like merge self-check: ok")
+    run {
+        fun t(id: String) = com.metrolist.desktop.data.Track(id, id)
+        // Shuffle on, "x" added, "b" removed, shuffle off: original order, "b" gone, "x" kept at the end.
+        val order = com.metrolist.desktop.playback.unshuffledOrder(listOf(t("a"), t("b"), t("c")), listOf(t("c"), t("x"), t("a")))
+        check(order.map { it.id } == listOf("a", "c", "x")) { "unshuffle keeps queued songs: $order" }
+    }
+    println("unshuffle self-check: ok")
     java.io.File.createTempFile("metrolist-backup", ".json").let { f ->
         com.metrolist.desktop.data.Backup.export(f)
         val cookie = com.metrolist.desktop.data.Settings.value.cookie

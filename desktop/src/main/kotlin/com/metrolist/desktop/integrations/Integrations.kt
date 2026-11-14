@@ -169,7 +169,7 @@ object Integrations {
                     }
                     if (s.discordListenButton || s.discordProjectButton) {
                         putJsonArray("buttons") {
-                            if (s.discordListenButton) addJsonObject { put("label", "Listen on YouTube Music"); put("url", track.shareLink) }
+                            if (s.discordListenButton) addJsonObject { put("label", if (track.id.startsWith("soundcloud:")) "Listen on SoundCloud" else if (track.id.startsWith("spotify:")) "Listen on Spotify" else "Listen on YouTube Music"); put("url", track.shareLink) }
                             if (s.discordProjectButton) addJsonObject { put("label", "Visit Metrolist"); put("url", "https://github.com/MetrolistGroup/Metrolist") }
                         }
                     }

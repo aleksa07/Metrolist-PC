@@ -111,7 +111,10 @@ object Updater {
                     check(resp.statusCode() == 200) { "download failed (HTTP ${resp.statusCode()})" }
                     // GitHub publishes a SHA-256 for every release asset; refuse to run anything that doesn't match.
                     asset.digest?.takeIf { it.startsWith("sha256:") }?.let { expected ->
-                        val actual = MessageDigest.getInstance("SHA-256").digest(file.readBytes()).joinToString("") { "%02x".format(it) }
+                        val md = MessageDigest.getInstance("SHA-256")
+                        // Hashed in pieces: the installer is ~200 MB and the app's heap is capped at 768 MB.
+                        file.inputStream().use { java.security.DigestInputStream(it, md).transferTo(java.io.OutputStream.nullOutputStream()) }
+                        val actual = md.digest().joinToString("") { "%02x".format(it) }
                         check(actual.equals(expected.removePrefix("sha256:"), true)) {
                             file.delete()
                             "the download didn't match its checksum"

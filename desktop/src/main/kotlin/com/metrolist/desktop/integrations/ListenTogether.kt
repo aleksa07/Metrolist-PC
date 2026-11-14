@@ -378,7 +378,8 @@ object ListenTogether {
             ),
         )
 
-    private fun upcoming(): List<Track> = Player.queue.value.drop(Player.index.value + 1).take(50)
+    // Phone guests only play YouTube ids; Spotify songs are sent once they've been matched to one.
+    private fun upcoming(): List<Track> = Player.queue.value.drop(Player.index.value + 1).filter { ':' !in it.id }.take(50)
 
     private fun broadcastCurrent() {
         val t = Player.current.value ?: return
@@ -396,7 +397,8 @@ object ListenTogether {
                 var lastTick = System.currentTimeMillis()
                 var lastQueue: List<String> = emptyList()
                 while (true) {
-                    val t = Player.current.value
+                    // An unmatched Spotify song becomes a YouTube one within a moment; wait for that.
+                    val t = Player.current.value?.takeUnless { Spotify.isPlaceholder(it) }
                     val playing = Player.isPlaying.value
                     val pos = Player.position.value
                     val now = System.currentTimeMillis()
@@ -406,6 +408,7 @@ object ListenTogether {
                             t.id != lastId -> {
                                 action(PlaybackActions.CHANGE_TRACK, t, queue = upcoming())
                                 if (playing) action(PlaybackActions.PLAY, t, pos)
+                                if (SoundCloud.isTrack(t)) com.metrolist.desktop.ui.Ui.toast("Guests on phones can't play SoundCloud songs")
                                 lastQueue = queueIds
                             }
                             playing != lastPlaying -> action(if (playing) PlaybackActions.PLAY else PlaybackActions.PAUSE, t, pos)

@@ -29,7 +29,11 @@ data class Track(
 ) {
     val artistText: String get() = artists.joinToString(", ") { it.name }
     val shareLink: String get() =
-        if (id.startsWith("soundcloud:")) "https://w.soundcloud.com/player/?url=https%3A//api.soundcloud.com/tracks/${id.substringAfter(':')}" else "https://music.youtube.com/watch?v=$id"
+        when {
+            id.startsWith("soundcloud:") -> "https://w.soundcloud.com/player/?url=https%3A//api.soundcloud.com/tracks/${id.substringAfter(':')}"
+            id.startsWith("spotify:") -> "https://open.spotify.com/track/${id.substringAfter(':')}"
+            else -> "https://music.youtube.com/watch?v=$id"
+        }
 }
 
 fun SongItem.toTrack() =

@@ -356,7 +356,7 @@ object Player : AudioEngine.Listener {
             _index.value = 0
             _shuffle.value = true
         } else {
-            val original = unshuffled ?: q
+            val original = unshuffledOrder(unshuffled ?: q, q)
             _queue.value = original
             _index.value = original.indexOfFirst { it.id == cur.id }.coerceAtLeast(0)
             _shuffle.value = false
@@ -374,6 +374,7 @@ object Player : AudioEngine.Listener {
         cancelPrepared()
         engine.stop()
         engineLoaded = false
+        stream = null
         _readyTrackId.value = null
         proxyUrl?.let(RangeProxy::unregister)
         _error.value = null
@@ -469,7 +470,10 @@ object Player : AudioEngine.Listener {
 
     override fun onReady(durationMs: Long) {
         if (durationMs > 0) _duration.value = durationMs
-        scope.launch { _readyTrackId.value = _current.value?.id }
+        scope.launch {
+            _readyTrackId.value = _current.value?.id
+            retriedFor = null // a later expiry of the same song (long pause, repeat-one) gets its own retry
+        }
     }
 
     override fun onAdvanced(key: String, durationMs: Long) {
@@ -517,9 +521,10 @@ object Player : AudioEngine.Listener {
             val failed = stream
             val track = _current.value
             // Expired or client-rejected URLs: re-resolve once with that client excluded, resuming in place.
-            if (failed != null && track != null && retriedFor != track.id) {
+            if (track != null && retriedFor != track.id) {
                 retriedFor = track.id
-                StreamResolver.markFailed(failed)
+                // SoundCloud and downloads have no YouTube stream to blame; a reload alone gets a fresh link.
+                failed?.takeIf { it.videoId == track.id }?.let { StreamResolver.markFailed(it) }
                 load(_position.value, true)
                 return@launch
             }
@@ -528,4 +533,12 @@ object Player : AudioEngine.Listener {
             engineLoaded = false
         }
     }
+}
+
+/** The pre-shuffle order without songs removed since, plus songs added while shuffled (in their queue order). */
+internal fun unshuffledOrder(original: List<Track>, queue: List<Track>): List<Track> {
+    val queued = queue.map { it.id }.toSet()
+    val kept = original.filter { it.id in queued }
+    val keptIds = kept.map { it.id }.toSet()
+    return kept + queue.filterNot { it.id in keptIds }
 }
