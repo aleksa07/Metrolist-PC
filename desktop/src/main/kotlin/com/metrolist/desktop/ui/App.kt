@@ -148,8 +148,13 @@ fun App(state: AppState) {
                             )
                             Spacer(Modifier.height(12.dp))
                         }
-                        Box(Modifier.weight(1f).fillMaxHeight().clip(RoundedCornerShape(topStart = 16.dp)).background(MaterialTheme.colorScheme.surface)) {
-                            ScreenHost(nav)
+                        Column(Modifier.weight(1f).fillMaxHeight().clip(RoundedCornerShape(topStart = 16.dp)).background(MaterialTheme.colorScheme.surface)) {
+                            Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                                IconButton(onClick = nav::pop, enabled = nav.canGoBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back") }
+                                Spacer(Modifier.size(8.dp))
+                                SearchBox(state.searchFocus, { state.searchFocused = it }, Modifier.widthIn(max = 640.dp).weight(1f, fill = false))
+                            }
+                            Box(Modifier.weight(1f)) { ScreenHost(nav) }
                         }
                         if (settings.showQueuePanel && current != null) QueuePanel(nav)
                     }
@@ -168,23 +173,18 @@ fun App(state: AppState) {
     }
 }
 
-/** Logo, back, search and (on Windows) the window buttons, drawn in the window's title bar. */
+/** The window's title bar: logo, name and (on Windows) the window buttons; the rest of it drags the window. */
 @Composable
 private fun TopBar(state: AppState) {
-    val nav = state.nav
     Row(
-        Modifier.fillMaxWidth().height(60.dp).onGloballyPositioned { WindowFrame.captionHeightPx = it.size.height },
+        Modifier.fillMaxWidth().height(32.dp).onGloballyPositioned { WindowFrame.captionHeightPx = it.size.height },
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Box(Modifier.width(80.dp), contentAlignment = Alignment.Center) {
-            androidx.compose.foundation.Image(painterResource("icon.png"), "Metrolist", Modifier.size(30.dp).clip(RoundedCornerShape(8.dp)))
+            androidx.compose.foundation.Image(painterResource("icon.png"), "Metrolist", Modifier.size(18.dp).clip(RoundedCornerShape(4.dp)))
         }
-        with(WindowFrame) {
-            IconButton(onClick = nav::pop, enabled = nav.canGoBack, modifier = Modifier.titleBarControl()) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back") }
-            Spacer(Modifier.size(8.dp))
-            SearchBox(state.searchFocus, { state.searchFocused = it }, Modifier.titleBarControl().widthIn(max = 640.dp).weight(1f, fill = false))
-        }
-        Spacer(Modifier.weight(0.4f))
+        Text("Metrolist", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Spacer(Modifier.weight(1f))
         val window = state.window
         if (WindowFrame.active && window != null) {
             WindowButtons(
@@ -192,7 +192,6 @@ private fun TopBar(state: AppState) {
                 onMinimize = { window.isMinimized = true },
                 onToggleMaximize = { window.placement = if (window.placement == WindowPlacement.Maximized) WindowPlacement.Floating else WindowPlacement.Maximized },
                 onClose = state.closeWindow,
-                modifier = Modifier.align(Alignment.Top),
             )
         } else {
             Spacer(Modifier.width(16.dp))

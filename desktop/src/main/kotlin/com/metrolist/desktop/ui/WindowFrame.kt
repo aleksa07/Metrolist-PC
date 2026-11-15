@@ -59,10 +59,15 @@ object WindowFrame {
         fun GetDpiForWindow(hwnd: Pointer): Int
         fun GetSystemMetricsForDpi(index: Int, dpi: Int): Int
         fun SetWindowPos(hwnd: Pointer, after: Pointer?, x: Int, y: Int, cx: Int, cy: Int, flags: Int): Boolean
+        fun EnumChildWindows(parent: Pointer, cb: EnumProc, l: Pointer?): Boolean
     }
 
     private interface WndProc : StdCallLibrary.StdCallCallback {
         fun callback(hwnd: Pointer, msg: Int, w: Pointer?, l: Pointer?): Pointer?
+    }
+
+    private interface EnumProc : StdCallLibrary.StdCallCallback {
+        fun callback(hwnd: Pointer, l: Pointer?): Boolean
     }
 
     @Structure.FieldOrder("x", "y")
@@ -70,6 +75,7 @@ object WindowFrame {
 
     private val user32 by lazy { runCatching { Native.load("user32", User32::class.java) }.getOrNull() }
     private var proc: WndProc? = null // strong reference: the native side only holds a pointer
+    private val childProcs = ArrayList<WndProc>()
 
     fun install(window: ComposeWindow) {
         if (!supported || proc != null) return
@@ -83,6 +89,26 @@ object WindowFrame {
             }
         proc = p
         prev = u.SetWindowLongPtrW(hwnd, GWLP_WNDPROC, p)
+        // Compose renders into child windows that cover the frame, so they get the hit-test first.
+        // Over the drag area they answer "transparent", which hands the test to the frame above.
+        u.EnumChildWindows(hwnd, object : EnumProc {
+            override fun callback(hwnd: Pointer, l: Pointer?): Boolean {
+                var childPrev: Pointer? = null
+                val cp =
+                    object : WndProc {
+                        override fun callback(child: Pointer, msg: Int, w: Pointer?, l: Pointer?): Pointer? {
+                            if (msg == WM_NCHITTEST && l != null) {
+                                val hit = runCatching { screenHit(u, Pointer(window.windowHandle), l) }.getOrDefault(HTCLIENT)
+                                if (hit != HTCLIENT) return Pointer(HTTRANSPARENT.toLong())
+                            }
+                            return u.CallWindowProcW(childPrev!!, child, msg, w, l)
+                        }
+                    }
+                childProcs += cp
+                childPrev = u.SetWindowLongPtrW(hwnd, GWLP_WNDPROC, cp)
+                return true
+            }
+        }, null)
         // SWP_NOSIZE|SWP_NOMOVE|SWP_NOZORDER|SWP_NOACTIVATE|SWP_FRAMECHANGED: recompute the frame without the caption.
         u.SetWindowPos(hwnd, null, 0, 0, 0, 0, 0x0001 or 0x0002 or 0x0004 or 0x0010 or 0x0020)
         active = true
@@ -102,14 +128,19 @@ object WindowFrame {
             WM_NCHITTEST -> {
                 val native = u.CallWindowProcW(prev, hwnd, msg, w, l)
                 val hit = native?.let { Pointer.nativeValue(it).toInt() } ?: 0
-                if (hit in HTLEFT..HTBOTTOMRIGHT) return native
-                val lp = l?.let { Pointer.nativeValue(it) } ?: 0L
-                val pt = Point((lp and 0xFFFF).toShort().toInt(), (lp shr 16 and 0xFFFF).toShort().toInt())
-                u.ScreenToClient(hwnd, pt)
-                return Pointer(hitTest(u, hwnd, pt.x, pt.y).toLong())
+                if (hit in HTLEFT..HTBOTTOMRIGHT || l == null) return native
+                return Pointer(screenHit(u, hwnd, l).toLong())
             }
         }
         return u.CallWindowProcW(prev, hwnd, msg, w, l)
+    }
+
+    /** Hit-test for a WM_NCHITTEST lParam (screen coordinates), in the frame's client coordinates. */
+    private fun screenHit(u: User32, hwnd: Pointer, l: Pointer): Int {
+        val lp = Pointer.nativeValue(l)
+        val pt = Point((lp and 0xFFFF).toShort().toInt(), (lp shr 16 and 0xFFFF).toShort().toInt())
+        u.ScreenToClient(hwnd, pt)
+        return hitTest(u, hwnd, pt.x, pt.y)
     }
 
     private fun hitTest(u: User32, hwnd: Pointer, x: Int, y: Int): Int {
@@ -135,6 +166,7 @@ object WindowFrame {
     private const val GWLP_WNDPROC = -4
     private const val WM_NCCALCSIZE = 0x0083
     private const val WM_NCHITTEST = 0x0084
+    private const val HTTRANSPARENT = -1
     private const val HTCLIENT = 1
     private const val HTCAPTION = 2
     private const val HTLEFT = 10
