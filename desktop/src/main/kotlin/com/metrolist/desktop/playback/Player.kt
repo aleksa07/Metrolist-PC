@@ -63,6 +63,7 @@ object Player : AudioEngine.Listener {
     private var stream: ResolvedStream? = null
     private var proxyUrl: String? = null
     private var retriedFor: String? = null
+    private var retriedAtMs = 0L
     private var engineLoaded = false
     private var radioEndpoint: WatchEndpoint? = null
     private var radioContinuation: String? = null
@@ -470,10 +471,7 @@ object Player : AudioEngine.Listener {
 
     override fun onReady(durationMs: Long) {
         if (durationMs > 0) _duration.value = durationMs
-        scope.launch {
-            _readyTrackId.value = _current.value?.id
-            retriedFor = null // a later expiry of the same song (long pause, repeat-one) gets its own retry
-        }
+        scope.launch { _readyTrackId.value = _current.value?.id }
     }
 
     override fun onAdvanced(key: String, durationMs: Long) {
@@ -521,8 +519,11 @@ object Player : AudioEngine.Listener {
             val failed = stream
             val track = _current.value
             // Expired or client-rejected URLs: re-resolve once with that client excluded, resuming in place.
-            if (track != null && retriedFor != track.id) {
+            // Once per song per minute: a later expiry (long pause, repeat-one) retries, a stream that keeps breaking doesn't loop.
+            val now = System.currentTimeMillis()
+            if (track != null && (retriedFor != track.id || now - retriedAtMs > 60_000)) {
                 retriedFor = track.id
+                retriedAtMs = now
                 // SoundCloud and downloads have no YouTube stream to blame; a reload alone gets a fresh link.
                 failed?.takeIf { it.videoId == track.id }?.let { StreamResolver.markFailed(it) }
                 load(_position.value, true)

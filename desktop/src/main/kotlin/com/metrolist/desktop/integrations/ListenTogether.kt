@@ -408,7 +408,7 @@ object ListenTogether {
                             t.id != lastId -> {
                                 action(PlaybackActions.CHANGE_TRACK, t, queue = upcoming())
                                 if (playing) action(PlaybackActions.PLAY, t, pos)
-                                if (SoundCloud.isTrack(t)) com.metrolist.desktop.ui.Ui.toast("Guests on phones can't play SoundCloud songs")
+                                if (SoundCloud.isTrack(t) && (_state.value.room?.usersList?.size ?: 0) > 1) com.metrolist.desktop.ui.Ui.toast("Guests on phones can't play SoundCloud songs")
                                 lastQueue = queueIds
                             }
                             playing != lastPlaying -> action(if (playing) PlaybackActions.PLAY else PlaybackActions.PAUSE, t, pos)
