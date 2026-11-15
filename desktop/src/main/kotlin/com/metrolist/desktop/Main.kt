@@ -10,6 +10,7 @@ import androidx.compose.ui.input.key.isAltPressed
 import androidx.compose.ui.input.key.isCtrlPressed
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.type
+import androidx.compose.ui.input.key.utf16CodePoint
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
@@ -135,18 +136,25 @@ fun main(args: Array<String>) {
                     else -> false
                 }
             },
-            // Only keys that no focused control used: typing a space or moving the caret in a text field never reaches these.
+            // Only keys that no focused control used, so moving the caret in a text field never seeks.
             onKeyEvent = { e ->
-                if (e.type != KeyEventType.KeyDown || e.isAltPressed) return@Window false
+                if (e.isAltPressed) return@Window false
+                // A text field passes Space/L key presses on but consumes the typed character, so these act on that.
+                if (e.type == KeyEventType.Unknown && !e.isCtrlPressed) {
+                    return@Window when (e.utf16CodePoint) {
+                        ' '.code -> Player.togglePlay().let { true }
+                        'l'.code, 'L'.code -> Player.current.value?.let { com.metrolist.desktop.ui.Actions.toggleLike(it) } != null
+                        else -> false
+                    }
+                }
+                if (e.type != KeyEventType.KeyDown) return@Window false
                 val seekStep = 5_000L
                 when {
-                    e.key == Key.Spacebar && !e.isCtrlPressed -> Player.togglePlay().let { true }
                     e.isCtrlPressed && e.key == Key.DirectionUp -> Player.setVolume(Settings.value.volume + 0.05f).let { true }
                     e.isCtrlPressed && e.key == Key.DirectionDown -> Player.setVolume(Settings.value.volume - 0.05f).let { true }
                     e.isCtrlPressed -> false
                     e.key == Key.DirectionRight -> Player.seekTo((Player.position.value + seekStep).coerceAtMost(Player.duration.value)).let { true }
                     e.key == Key.DirectionLeft -> Player.seekTo((Player.position.value - seekStep).coerceAtLeast(0)).let { true }
-                    e.key == Key.L -> Player.current.value?.let { com.metrolist.desktop.ui.Actions.toggleLike(it) } != null
                     else -> false
                 }
             },

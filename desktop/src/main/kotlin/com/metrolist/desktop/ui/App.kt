@@ -160,7 +160,8 @@ fun App(state: AppState) {
                     }
                     PlayerBar(nav)
                 }
-                AnimatedVisibility(Ui.expandedPlayer && current != null, enter = slideInVertically { it }, exit = slideOutVertically { it }) {
+                // Below the title bar, so the window buttons and drag area stay usable.
+                AnimatedVisibility(Ui.expandedPlayer && current != null, Modifier.padding(top = TitleBarHeight), enter = slideInVertically { it }, exit = slideOutVertically { it }) {
                     ExpandedPlayer(nav)
                 }
                 com.metrolist.desktop.integrations.Updater.available?.takeIf { !settings.autoInstallUpdates }?.let { r -> UpdateBanner(r.version) }
@@ -173,11 +174,13 @@ fun App(state: AppState) {
     }
 }
 
+private val TitleBarHeight = 32.dp
+
 /** The window's title bar: logo, name and (on Windows) the window buttons; the rest of it drags the window. */
 @Composable
 private fun TopBar(state: AppState) {
     Row(
-        Modifier.fillMaxWidth().height(32.dp).onGloballyPositioned { WindowFrame.captionHeightPx = it.size.height },
+        Modifier.fillMaxWidth().height(TitleBarHeight).onGloballyPositioned { WindowFrame.captionHeightPx = it.size.height },
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Box(Modifier.width(80.dp), contentAlignment = Alignment.Center) {
@@ -236,7 +239,7 @@ private fun androidx.compose.foundation.layout.BoxScope.UpdateBanner(version: St
         color = MaterialTheme.colorScheme.primaryContainer,
         shape = RoundedCornerShape(16.dp),
         tonalElevation = 6.dp,
-        modifier = Modifier.align(Alignment.TopEnd).padding(top = 68.dp, end = 16.dp), // below the title bar, which drags the window
+        modifier = Modifier.align(Alignment.TopEnd).padding(top = TitleBarHeight + 8.dp, end = 16.dp), // below the title bar, which drags the window
     ) {
         Row(Modifier.padding(horizontal = 16.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
             Text("Metrolist PC $version is available")

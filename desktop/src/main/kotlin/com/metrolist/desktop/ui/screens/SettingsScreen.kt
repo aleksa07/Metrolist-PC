@@ -215,7 +215,7 @@ fun SettingsScreen() {
                     Text("Crossfade", style = MaterialTheme.typography.bodyLarge)
                     Text(if (s.crossfadeSec == 0) "Off: songs follow each other without a gap" else "Fade into the next song over ${s.crossfadeSec} s", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
-                Slider(s.crossfadeSec.toFloat(), { Player.setCrossfade(it.toInt()) }, valueRange = 0f..12f, steps = 11, modifier = Modifier.width(240.dp))
+                Slider(s.crossfadeSec.toFloat(), { Player.setCrossfade(kotlin.math.round(it).toInt()) }, valueRange = 0f..12f, steps = 11, modifier = Modifier.width(240.dp))
             }
         }
 
