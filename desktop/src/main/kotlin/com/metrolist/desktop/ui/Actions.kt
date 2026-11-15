@@ -110,9 +110,9 @@ object Actions {
     }
 
     fun download(tracks: List<Track>) {
-        // Spotify and SoundCloud songs have no YouTube Music file to save.
-        val yt = tracks.filter { ':' !in it.id }
-        if (yt.isEmpty()) return Ui.toast("Only YouTube Music songs can be downloaded")
+        // A Spotify song is only a name until it is matched on YouTube Music.
+        val yt = tracks.filterNot(com.metrolist.desktop.integrations.Spotify::isPlaceholder)
+        if (yt.isEmpty()) return Ui.toast("Play Spotify songs once before downloading them")
         val started = com.metrolist.desktop.data.Downloads.download(yt)
         Ui.toast(
             when (started) {

@@ -99,7 +99,7 @@ fun LibraryScreen() {
                     }
                     if (liked.isEmpty()) item { Empty("Songs you like appear here. Click the heart on any song.") }
                     itemsIndexed(liked, key = { _, t -> t.id }) { i, t ->
-                        TrackRow(t, onClick = { Player.playQueue(liked, i, "Liked songs") }, menu = { trackMenu(nav, t) })
+                        TrackRow(t, list = liked, onClick = { Player.playQueue(liked, i, "Liked songs") }, menu = { trackMenu(nav, t) })
                     }
                 }
             }
@@ -162,7 +162,7 @@ fun LibraryScreen() {
                     }
                     if (tracks.isEmpty()) item { Empty("Downloaded songs play without internet. Use Download in any song's menu.") }
                     itemsIndexed(tracks, key = { _, t -> t.id }) { i, t ->
-                        TrackRow(t, onClick = { Player.playQueue(tracks, i, "Downloads") }, menu = { trackMenu(nav, t) })
+                        TrackRow(t, list = tracks, onClick = { Player.playQueue(tracks, i, "Downloads") }, menu = { trackMenu(nav, t) })
                     }
                 }
             }

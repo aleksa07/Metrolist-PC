@@ -169,6 +169,21 @@ private fun BackupSection() {
     }
 }
 
+// Keep in sync with the key handlers in Main.kt.
+private val shortcuts =
+    listOf(
+        "Space" to "Play / pause",
+        "Ctrl + Right / Left" to "Next / previous song",
+        "Right / Left" to "Seek 5 seconds forward / back",
+        "Ctrl + Up / Down" to "Volume up / down",
+        "L" to "Like the current song",
+        "Ctrl + F" to "Search",
+        "Alt + Left, mouse back button" to "Go back",
+        "Esc" to "Close the now-playing view, clear the selection",
+        "Ctrl / Shift + click" to "Select several songs",
+        "Media keys" to "Play / pause, next, previous",
+    )
+
 @Composable
 fun SettingsScreen() {
     val s by Settings.state.collectAsState()
@@ -194,6 +209,14 @@ fun SettingsScreen() {
             }
             HorizontalDivider()
             OutputDeviceRow(s.outputDevice)
+            HorizontalDivider()
+            Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Text("Crossfade", style = MaterialTheme.typography.bodyLarge)
+                    Text(if (s.crossfadeSec == 0) "Off: songs follow each other without a gap" else "Fade into the next song over ${s.crossfadeSec} s", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+                Slider(s.crossfadeSec.toFloat(), { Player.setCrossfade(it.toInt()) }, valueRange = 0f..12f, steps = 11, modifier = Modifier.width(240.dp))
+            }
         }
 
         Group("Equalizer") { EqualizerSection(s.eqGains) }
@@ -257,6 +280,17 @@ fun SettingsScreen() {
                 OutlinedButton(onClick = { scope.launch { updater.check(userInitiated = true) } }) { Text("Check now") }
                 updater.available?.let { r -> Button(onClick = { scope.launch { updater.install() } }) { Text("Install ${r.version}") } }
                 Text(updater.status ?: "Version ${updater.currentVersion ?: "dev"}", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+        }
+
+        Group("Keyboard shortcuts") {
+            Column(Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
+                shortcuts.forEach { (keys, what) ->
+                    Row(Modifier.fillMaxWidth().padding(vertical = 5.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Text(what, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
+                        Text(keys, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                }
             }
         }
 

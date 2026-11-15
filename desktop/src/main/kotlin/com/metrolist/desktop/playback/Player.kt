@@ -53,6 +53,10 @@ object Player : AudioEngine.Listener {
     val shuffle: StateFlow<Boolean> = _shuffle.asStateFlow()
     private val _queueTitle = MutableStateFlow<String?>(null)
 
+    /** Playback speed; not saved, so music after a podcast starts at normal speed again. */
+    private val _speed = MutableStateFlow(1f)
+    val speed: StateFlow<Float> = _speed.asStateFlow()
+
     /** Id of the track whose audio is decoded and ready (Listen Together reports this as "buffered"). */
     private val _readyTrackId = MutableStateFlow<String?>(null)
     val readyTrackId: StateFlow<String?> = _readyTrackId.asStateFlow()
@@ -89,6 +93,7 @@ object Player : AudioEngine.Listener {
         }, "ffmpeg-preload").apply { isDaemon = true }.start()
 
         engine.volume = Settings.value.volume
+        engine.crossfadeMs = Settings.value.crossfadeSec * 1000L
         engine.outputDevice = Settings.value.outputDevice
         engine.equalizer.setGains(Settings.value.eqGains)
         scope.launch {
@@ -338,6 +343,16 @@ object Player : AudioEngine.Listener {
         engine.equalizer.setGains(gains)
     }
 
+    fun setSpeed(v: Float) {
+        _speed.value = v
+        engine.speed = v
+    }
+
+    fun setCrossfade(sec: Int) {
+        Settings.update { it.copy(crossfadeSec = sec) }
+        engine.crossfadeMs = sec * 1000L
+    }
+
     fun setVolume(v: Float) {
         engine.volume = v.coerceIn(0f, 1f)
         Settings.update { it.copy(volume = engine.volume) }
@@ -480,7 +495,8 @@ object Player : AudioEngine.Listener {
             val next = expectedNext()
             // The queue changed in the last moment: fall back to loading the right track.
             if (src == null || preparedFor != key || next?.id != key) return@launch onEnded()
-            proxyUrl?.let(RangeProxy::unregister)
+            // During a crossfade the old song still reads from its proxy entry for a few seconds.
+            proxyUrl?.let { old -> scope.launch { delay(Settings.value.crossfadeSec * 1000L + 2000); RangeProxy.unregister(old) } }
             proxyUrl = src.url
             stream = src.stream
             preparedFor = null

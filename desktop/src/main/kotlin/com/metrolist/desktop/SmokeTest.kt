@@ -31,6 +31,10 @@ fun runSelfChecks() {
     println("spectrum self-check: ok")
     com.metrolist.desktop.playback.Equalizer.selfCheck()
     println("equaliser self-check: ok")
+    AudioEngine.selfCheck()
+    println("pcm fifo self-check: ok")
+    com.metrolist.desktop.ui.Selection.selfCheck()
+    println("selection self-check: ok")
     with(com.metrolist.desktop.integrations.Updater) {
         check(isNewer("1.1.0", "1.0.0") && isNewer("1.0.10", "1.0.9") && !isNewer("1.0.0", "1.0.0") && !isNewer("1.0.0", "1.1.0")) { "version compare" }
     }
@@ -134,16 +138,22 @@ fun runSmokeTest(queryArg: String?): Unit = runBlocking {
     Thread.sleep(2500)
     println("position after seek to 60 s (+2.5 s): ${engine.positionMs} ms")
     val seekOk = engine.positionMs > 60_000
-    // Gapless hand-over into a local file with the equaliser on: the path downloaded songs take.
+    // Crossfaded hand-over into a local file with the equaliser on: the path downloaded songs take.
     val local = java.io.File.createTempFile("metrolist-smoke", ".audio")
     java.net.URI(url).toURL().openStream().use { input -> local.outputStream().use { input.copyTo(it) } }
     engine.equalizer.setGains(listOf(3f, 0f, 0f, 0f, 3f))
+    engine.crossfadeMs = 3000
     engine.prepareNext("local", local.absolutePath, null, 1f)
     engine.seekTo(engine.durationMs - 4000)
     val handedOver = advanced.await(25, java.util.concurrent.TimeUnit.SECONDS)
     Thread.sleep(2000)
     val after = engine.positionMs
-    println("gapless into local file (${local.length()} bytes): advanced=$handedOver position=$after ms")
+    println("crossfade into local file (${local.length()} bytes): advanced=$handedOver position=$after ms")
+    engine.speed = 1.5f
+    val before = engine.positionMs
+    Thread.sleep(2000)
+    val sped = engine.positionMs - before
+    println("speed 1.5: advanced $sped ms in 2 s")
     engine.stop()
     local.delete()
     done.countDown()
@@ -161,6 +171,25 @@ fun runSmokeTest(queryArg: String?): Unit = runBlocking {
     Thread.sleep(3000)
     val scPos = com.metrolist.desktop.playback.Player.position.value
     println("soundcloud plays: ready=${scReady != null} position after 3 s=$scPos ms error=${com.metrolist.desktop.playback.Player.error.value}")
+    val found = com.metrolist.desktop.integrations.SoundCloud.search("flickermood").getOrNull()
+    println("soundcloud search: ${found?.size} results, first: ${found?.firstOrNull()?.title}")
+    // A downloaded SoundCloud song is remuxed from HLS into one file and plays from disk.
+    val sc = com.metrolist.desktop.data.Track("soundcloud:293", "Flickermood", durationSec = 213)
+    val dl = com.metrolist.desktop.data.Downloads
+    val hadIt = dl.entry(sc.id) != null
     com.metrolist.desktop.playback.Player.pause()
-    exitProcess(if (failure == null && seekOk && handedOver && after in 500..6000 && swapped != null && scReady != null && scPos > 500) 0 else 1)
+    dl.download(listOf(sc))
+    val saved = kotlinx.coroutines.withTimeoutOrNull(120_000) { dl.active.first { sc.id !in it }; dl.entry(sc.id) != null } == true
+    var offline = false
+    if (saved) {
+        println("soundcloud download: ${dl.file(sc.id).length()} bytes")
+        com.metrolist.desktop.playback.Player.playQueue(listOf(sc))
+        kotlinx.coroutines.withTimeoutOrNull(30_000) { com.metrolist.desktop.playback.Player.readyTrackId.first { it == sc.id } }
+        Thread.sleep(3000)
+        offline = com.metrolist.desktop.playback.Player.position.value > 500
+        println("downloaded soundcloud plays: position=${com.metrolist.desktop.playback.Player.position.value} ms")
+        if (!hadIt) dl.remove(sc.id)
+    }
+    com.metrolist.desktop.playback.Player.pause()
+    exitProcess(if (!found.isNullOrEmpty() && saved && offline && failure == null && seekOk && handedOver && after in 500..6000 && sped in 2400..3800 && swapped != null && scReady != null && scPos > 500) 0 else 1)
 }

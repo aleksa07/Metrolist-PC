@@ -88,6 +88,7 @@ data class AppSettings(
     val audioQuality: AudioQuality = AudioQuality.AUTO,
     val normalizeVolume: Boolean = true,
     val volume: Float = 0.8f,
+    val crossfadeSec: Int = 0,
     val autoRadio: Boolean = true,
     val cookie: String = "",
     val contentLanguage: String = "en",

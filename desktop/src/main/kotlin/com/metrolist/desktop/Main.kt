@@ -60,6 +60,7 @@ fun main(args: Array<String>) {
     application {
         val windowState = rememberWindowState(size = DpSize(1360.dp, 860.dp))
         val appState = remember { AppState() }
+        appState.window = windowState
         val current by Player.current.collectAsState()
         val playing by Player.isPlaying.collectAsState()
         val icon = painterResource("icon.png")
@@ -110,9 +111,11 @@ fun main(args: Array<String>) {
                 }
             }
         }
+        // With "close to tray" the X button only hides the window; music keeps playing and the tray icon brings it back.
+        val close = { if (Settings.value.closeToTray) visible = false else quit() }
+        appState.closeWindow = close
         Window(
-            // With "close to tray" the X button only hides the window; music keeps playing and the tray icon brings it back.
-            onCloseRequest = { if (Settings.value.closeToTray) visible = false else quit() },
+            onCloseRequest = close,
             visible = visible && !Ui.miniPlayer,
             state = windowState,
             title = current?.let { "${it.title} • ${it.artistText} — Metrolist" } ?: "Metrolist",
@@ -123,12 +126,27 @@ fun main(args: Array<String>) {
                     e.key == Key.MediaPlayPause -> Player.togglePlay().let { true }
                     e.key == Key.MediaNext -> Player.next().let { true }
                     e.key == Key.MediaPrevious -> Player.previous().let { true }
-                    e.key == Key.Spacebar && !appState.searchFocused -> Player.togglePlay().let { true }
                     e.isCtrlPressed && e.key == Key.DirectionRight -> Player.next().let { true }
                     e.isCtrlPressed && e.key == Key.DirectionLeft -> Player.previous().let { true }
                     e.isCtrlPressed && (e.key == Key.F || e.key == Key.L) -> runCatching { appState.searchFocus.requestFocus() }.isSuccess
                     e.isAltPressed && e.key == Key.DirectionLeft -> appState.nav.pop().let { true }
                     e.key == Key.Escape && Ui.expandedPlayer -> { Ui.expandedPlayer = false; true }
+                    e.key == Key.Escape && com.metrolist.desktop.ui.Selection.tracks.isNotEmpty() -> com.metrolist.desktop.ui.Selection.clear().let { true }
+                    else -> false
+                }
+            },
+            // Only keys that no focused control used: typing a space or moving the caret in a text field never reaches these.
+            onKeyEvent = { e ->
+                if (e.type != KeyEventType.KeyDown || e.isAltPressed) return@Window false
+                val seekStep = 5_000L
+                when {
+                    e.key == Key.Spacebar && !e.isCtrlPressed -> Player.togglePlay().let { true }
+                    e.isCtrlPressed && e.key == Key.DirectionUp -> Player.setVolume(Settings.value.volume + 0.05f).let { true }
+                    e.isCtrlPressed && e.key == Key.DirectionDown -> Player.setVolume(Settings.value.volume - 0.05f).let { true }
+                    e.isCtrlPressed -> false
+                    e.key == Key.DirectionRight -> Player.seekTo((Player.position.value + seekStep).coerceAtMost(Player.duration.value)).let { true }
+                    e.key == Key.DirectionLeft -> Player.seekTo((Player.position.value - seekStep).coerceAtLeast(0)).let { true }
+                    e.key == Key.L -> Player.current.value?.let { com.metrolist.desktop.ui.Actions.toggleLike(it) } != null
                     else -> false
                 }
             },
@@ -137,7 +155,10 @@ fun main(args: Array<String>) {
             MetrolistTheme {
                 val surface = androidx.compose.material3.MaterialTheme.colorScheme.surface
                 androidx.compose.runtime.LaunchedEffect(surface) { com.metrolist.desktop.ui.TitleBar.apply(window, surface) }
-                androidx.compose.runtime.LaunchedEffect(Unit) { com.metrolist.desktop.integrations.MediaControls.start(window.windowHandle) }
+                androidx.compose.runtime.LaunchedEffect(Unit) {
+                    com.metrolist.desktop.integrations.MediaControls.start(window.windowHandle)
+                    com.metrolist.desktop.ui.WindowFrame.install(window)
+                }
                 androidx.compose.runtime.LaunchedEffect(Unit) {
                     for (ping in showRequests) {
                         show()

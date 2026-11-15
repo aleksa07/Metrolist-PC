@@ -205,12 +205,29 @@ fun SearchScreen(screen: Screen.Search) {
     var filterIndex by remember(screen.query) { mutableStateOf(0) }
     Column {
         LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp)) {
-            items(filters.size) { i ->
-                FilterChip(selected = filterIndex == i, onClick = { filterIndex = i }, label = { Text(filters[i].first) })
+            // The last chip searches SoundCloud instead of YouTube Music.
+            items(filters.size + 1) { i ->
+                FilterChip(selected = filterIndex == i, onClick = { filterIndex = i }, label = { Text(filters.getOrNull(i)?.first ?: "SoundCloud") })
             }
         }
-        val filter = filters[filterIndex].second
-        if (filter == null) {
+        val filter = filters.getOrNull(filterIndex)?.second
+        if (filterIndex == filters.size) {
+            val loader = rememberLoad("soundcloud:${screen.query}") { com.metrolist.desktop.integrations.SoundCloud.search(screen.query) }
+            LoadView(loader) { tracks ->
+                LazyColumn(contentPadding = screenPadding) {
+                    if (tracks.isEmpty()) item { Text("No results", Modifier.padding(24.dp)) }
+                    items(tracks.size) { i ->
+                        val t = tracks[i]
+                        com.metrolist.desktop.ui.TrackRow(
+                            t,
+                            list = tracks,
+                            onClick = { com.metrolist.desktop.playback.Player.playQueue(tracks, i, "SoundCloud: ${screen.query}") },
+                            menu = { com.metrolist.desktop.ui.trackMenu(nav, t) },
+                        )
+                    }
+                }
+            }
+        } else if (filter == null) {
             val loader = rememberLoad("searchSummary:${screen.query}") { YouTube.searchSummary(screen.query) }
             LoadView(loader) { page ->
                 if (page.summaries.isEmpty()) {

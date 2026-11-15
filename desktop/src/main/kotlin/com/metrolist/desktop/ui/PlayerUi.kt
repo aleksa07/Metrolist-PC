@@ -1,5 +1,7 @@
 package com.metrolist.desktop.ui
 
+import androidx.compose.material.icons.automirrored.filled.PlaylistAdd
+
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material.icons.filled.PictureInPictureAlt
@@ -255,6 +257,22 @@ fun LikeButton(track: Track, light: Boolean = false) {
 }
 
 @Composable
+private fun SpeedButton() {
+    val speed by Player.speed.collectAsState()
+    var open by remember { mutableStateOf(false) }
+    Box {
+        androidx.compose.material3.TextButton(onClick = { open = true }) {
+            Text("${speed.toString().removeSuffix(".0")}×", color = if (speed != 1f) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface)
+        }
+        DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+            listOf(0.5f, 0.75f, 1f, 1.25f, 1.5f, 1.75f, 2f).forEach { v ->
+                DropdownMenuItem(text = { Text(if (v == 1f) "Normal" else "${v}×") }, onClick = { open = false; Player.setSpeed(v) })
+            }
+        }
+    }
+}
+
+@Composable
 private fun SleepTimerButton() {
     val endsAt by Player.sleepEndsAt.collectAsState()
     val atEnd by Player.sleepAtEnd.collectAsState()
@@ -324,6 +342,7 @@ fun PlayerBar(nav: Navigator) {
             }
             // Not weighted: the volume controls keep their full width and the seek bar absorbs a narrow window.
             Row(Modifier.padding(start = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+                SpeedButton()
                 SleepTimerButton()
                 IconButton(onClick = { Ui.miniPlayer = true }) { Icon(Icons.Default.PictureInPictureAlt, "Mini player") }
                 IconButton(onClick = { Ui.expandedPlayer = true }) { Icon(Icons.Default.Lyrics, "Lyrics") }
@@ -350,6 +369,10 @@ fun QueueList(nav: Navigator, light: Boolean = false, modifier: Modifier = Modif
                 title?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = if (light) Color.White.copy(alpha = 0.7f) else MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis) }
             }
             Text("${queue.size} songs", style = MaterialTheme.typography.labelMedium, color = if (light) Color.White.copy(alpha = 0.7f) else MaterialTheme.colorScheme.onSurfaceVariant)
+            IconButton(onClick = {
+                com.metrolist.desktop.data.Library.createPlaylist(title ?: "Queue", queue)
+                Ui.toast("Saved queue as a playlist")
+            }, enabled = queue.isNotEmpty()) { Icon(Icons.AutoMirrored.Filled.PlaylistAdd, "Save queue as playlist", tint = if (light) Color.White else MaterialTheme.colorScheme.onSurfaceVariant) }
             IconButton(onClick = Player::clearQueue) { Icon(Icons.Default.ClearAll, "Clear queue", tint = if (light) Color.White else MaterialTheme.colorScheme.onSurfaceVariant) }
         }
         LazyColumn(state = state, contentPadding = PaddingValues(8.dp)) {

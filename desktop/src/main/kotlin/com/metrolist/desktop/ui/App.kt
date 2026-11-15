@@ -4,7 +4,12 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.Crossfade
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.width
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.window.WindowPlacement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -96,6 +101,8 @@ private val tabs =
 
 class AppState {
     val nav = Navigator()
+    var window: androidx.compose.ui.window.WindowState? = null
+    var closeWindow: () -> Unit = {}
     val searchFocus = FocusRequester()
     var searchFocused = false
 }
@@ -118,17 +125,10 @@ fun App(state: AppState) {
     CompositionLocalProvider(LocalNavigator provides nav) {
         Surface(color = MaterialTheme.colorScheme.surface, modifier = Modifier.fillMaxSize()) {
             Box(Modifier.fillMaxSize().onPointerEvent(PointerEventType.Press) { e -> if (e.button == PointerButton.Back) nav.pop() }) {
-                Column(Modifier.fillMaxSize()) {
+                Column(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.surfaceContainerLow)) {
+                    TopBar(state)
                     Row(Modifier.weight(1f)) {
-                        NavigationRail(containerColor = MaterialTheme.colorScheme.surfaceContainerLow, header = {
-                            Spacer(Modifier.height(8.dp))
-                            androidx.compose.foundation.Image(
-                                painterResource("icon.png"),
-                                "Metrolist",
-                                Modifier.size(40.dp).clip(RoundedCornerShape(10.dp)),
-                            )
-                            Spacer(Modifier.height(16.dp))
-                        }) {
+                        NavigationRail(containerColor = MaterialTheme.colorScheme.surfaceContainerLow) {
                             tabs.forEach { tab ->
                                 val selected = nav.rootScreen == tab.screen
                                 NavigationRailItem(
@@ -148,12 +148,7 @@ fun App(state: AppState) {
                             )
                             Spacer(Modifier.height(12.dp))
                         }
-                        Column(Modifier.weight(1f).fillMaxHeight()) {
-                            Row(Modifier.padding(horizontal = 16.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
-                                IconButton(onClick = nav::pop, enabled = nav.canGoBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back") }
-                                Spacer(Modifier.size(8.dp))
-                                SearchBox(state.searchFocus, { state.searchFocused = it }, Modifier.widthIn(max = 640.dp).weight(1f, fill = false))
-                            }
+                        Box(Modifier.weight(1f).fillMaxHeight().clip(RoundedCornerShape(topStart = 16.dp)).background(MaterialTheme.colorScheme.surface)) {
                             ScreenHost(nav)
                         }
                         if (settings.showQueuePanel && current != null) QueuePanel(nav)
@@ -164,9 +159,43 @@ fun App(state: AppState) {
                     ExpandedPlayer(nav)
                 }
                 com.metrolist.desktop.integrations.Updater.available?.takeIf { !settings.autoInstallUpdates }?.let { r -> UpdateBanner(r.version) }
+                LaunchedEffect(nav.current) { Selection.clear() }
+                SelectionBar(Modifier.align(Alignment.BottomCenter).padding(bottom = 104.dp))
                 SnackbarHost(snackbar, Modifier.align(Alignment.BottomCenter).padding(bottom = 100.dp)) { Snackbar(it) }
                 AddToPlaylistDialog()
             }
+        }
+    }
+}
+
+/** Logo, back, search and (on Windows) the window buttons, drawn in the window's title bar. */
+@Composable
+private fun TopBar(state: AppState) {
+    val nav = state.nav
+    Row(
+        Modifier.fillMaxWidth().height(60.dp).onGloballyPositioned { WindowFrame.captionHeightPx = it.size.height },
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Box(Modifier.width(80.dp), contentAlignment = Alignment.Center) {
+            androidx.compose.foundation.Image(painterResource("icon.png"), "Metrolist", Modifier.size(30.dp).clip(RoundedCornerShape(8.dp)))
+        }
+        with(WindowFrame) {
+            IconButton(onClick = nav::pop, enabled = nav.canGoBack, modifier = Modifier.titleBarControl()) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back") }
+            Spacer(Modifier.size(8.dp))
+            SearchBox(state.searchFocus, { state.searchFocused = it }, Modifier.titleBarControl().widthIn(max = 640.dp).weight(1f, fill = false))
+        }
+        Spacer(Modifier.weight(0.4f))
+        val window = state.window
+        if (WindowFrame.active && window != null) {
+            WindowButtons(
+                maximized = window.placement == WindowPlacement.Maximized,
+                onMinimize = { window.isMinimized = true },
+                onToggleMaximize = { window.placement = if (window.placement == WindowPlacement.Maximized) WindowPlacement.Floating else WindowPlacement.Maximized },
+                onClose = state.closeWindow,
+                modifier = Modifier.align(Alignment.Top),
+            )
+        } else {
+            Spacer(Modifier.width(16.dp))
         }
     }
 }
@@ -208,7 +237,7 @@ private fun androidx.compose.foundation.layout.BoxScope.UpdateBanner(version: St
         color = MaterialTheme.colorScheme.primaryContainer,
         shape = RoundedCornerShape(16.dp),
         tonalElevation = 6.dp,
-        modifier = Modifier.align(Alignment.TopEnd).padding(16.dp),
+        modifier = Modifier.align(Alignment.TopEnd).padding(top = 68.dp, end = 16.dp), // below the title bar, which drags the window
     ) {
         Row(Modifier.padding(horizontal = 16.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
             Text("Metrolist PC $version is available")

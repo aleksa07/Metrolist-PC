@@ -1,9 +1,10 @@
 package com.metrolist.desktop.ui
 
+import androidx.compose.ui.input.pointer.isCtrlPressed
+import androidx.compose.ui.input.pointer.isShiftPressed
+
 import androidx.compose.material.icons.filled.DownloadDone
 import androidx.compose.material.icons.filled.Download
-import androidx.compose.foundation.ContextMenuArea
-import androidx.compose.foundation.ContextMenuItem
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -120,32 +121,6 @@ fun Artwork(
     }
 }
 
-@OptIn(ExperimentalFoundationApi::class)
-@Composable
-fun WithContextMenu(entries: () -> List<MenuEntry>, content: @Composable () -> Unit) {
-    ContextMenuArea(items = { entries().map { e -> ContextMenuItem(e.label, e.action) } }, content = content)
-}
-
-@Composable
-fun MoreButton(entries: () -> List<MenuEntry>, tint: Color = MaterialTheme.colorScheme.onSurfaceVariant) {
-    var open by remember { mutableStateOf(false) }
-    Box {
-        IconButton(onClick = { open = true }) { Icon(Icons.Default.MoreVert, "More", tint = tint) }
-        DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
-            entries().forEach { e ->
-                DropdownMenuItem(
-                    text = { Text(e.label) },
-                    leadingIcon = { Icon(e.icon, null) },
-                    onClick = {
-                        open = false
-                        e.action()
-                    },
-                )
-            }
-        }
-    }
-}
-
 fun trackMenu(
     nav: Navigator,
     track: Track,
@@ -172,7 +147,7 @@ fun trackMenu(
         add(MenuEntry("Add to playlist…", Icons.AutoMirrored.Filled.PlaylistAdd) { Ui.addToPlaylist = listOf(track) })
         if (Library.value.downloads.any { it.track.id == track.id }) {
             add(MenuEntry("Remove download", Icons.Default.DownloadDone) { com.metrolist.desktop.data.Downloads.remove(track.id); Ui.toast("Download removed") })
-        } else if (':' !in track.id) {
+        } else if (!com.metrolist.desktop.integrations.Spotify.isPlaceholder(track)) {
             add(MenuEntry("Download", Icons.Default.Download) { Actions.download(listOf(track)) })
         }
         track.album?.let { a -> add(MenuEntry("Go to album", Icons.Default.Album) { nav.push(Screen.Album(a.id)) }) }
@@ -244,6 +219,8 @@ fun TrackRow(
     index: Int? = null,
     showArt: Boolean = true,
     modifier: Modifier = Modifier,
+    /** The song list this row is part of; enables Ctrl/Shift-click selection. */
+    list: List<Track>? = null,
 ) {
     val current by Player.current.collectAsState()
     val playing by Player.isPlaying.collectAsState()
@@ -252,14 +229,31 @@ fun TrackRow(
     val interaction = remember { MutableInteractionSource() }
     val hovered by interaction.collectIsHoveredAsState()
     val liked = lib.liked.any { it.id == track.id }
-    WithContextMenu(menu) {
+    val selected = list != null && Selection.isSelected(track)
+    val keys = androidx.compose.ui.platform.LocalWindowInfo.current
+    WithContextMenu({ if (selected && Selection.tracks.size > 1) Selection.menu() else menu() }) {
         Row(
             modifier
                 .fillMaxWidth()
                 .clip(RoundedCornerShape(8.dp))
-                .background(if (hovered) MaterialTheme.colorScheme.surfaceContainerHigh else Color.Transparent)
+                .background(
+                    when {
+                        selected -> MaterialTheme.colorScheme.secondaryContainer
+                        hovered -> MaterialTheme.colorScheme.surfaceContainerHigh
+                        else -> Color.Transparent
+                    },
+                )
                 .hoverable(interaction)
-                .clickable(onClick = onClick)
+                .clickable {
+                    val mods = keys.keyboardModifiers
+                    when {
+                        list != null && (mods.isCtrlPressed || mods.isShiftPressed) -> Selection.click(list, track, mods.isShiftPressed)
+                        else -> {
+                            Selection.clear()
+                            onClick()
+                        }
+                    }
+                }
                 .padding(horizontal = 8.dp, vertical = 6.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {

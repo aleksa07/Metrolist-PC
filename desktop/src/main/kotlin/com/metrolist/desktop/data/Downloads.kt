@@ -32,11 +32,15 @@ object Downloads {
     /** Ids being downloaded right now. */
     val active: StateFlow<Set<String>> = _active.asStateFlow()
 
-    // Ids also arrive from other people (Listen Together), so only plain YouTube ids may become file names.
+    // Ids also arrive from other people (Listen Together), so only plain ids may become file names.
     fun file(id: String): File {
-        require(id.matches(Regex("[A-Za-z0-9_-]{1,64}"))) { "not a video id" }
-        return File(dir, id)
+        val name = if (id.startsWith(SC)) "soundcloud_" + id.removePrefix(SC) else id
+        require(name.matches(Regex("[A-Za-z0-9_-]{1,64}"))) { "not a video id" }
+        return File(dir, name)
     }
+
+    private const val SC = "soundcloud:"
+
 
     fun entry(id: String): DownloadedTrack? =
         Library.value.downloads.firstOrNull { it.track.id == id }?.takeIf { runCatching { file(id).isFile }.getOrDefault(false) }
@@ -60,6 +64,7 @@ object Downloads {
     }
 
     private suspend fun fetch(t: Track) {
+        if (com.metrolist.desktop.integrations.SoundCloud.isTrack(t)) return fetchHls(t)
         val stream = StreamResolver.resolve(t.id, Settings.value.audioQuality).getOrThrow()
         // The loopback proxy already does the ranged, throttling-safe reads the player uses.
         val (url, entry) = RangeProxy.register(stream)
@@ -72,6 +77,35 @@ object Downloads {
         } finally {
             tmp.delete()
             RangeProxy.unregister(url)
+        }
+    }
+
+    /** SoundCloud streams are HLS playlists: copy the audio packets into one MP4 file, no re-encoding. */
+    private suspend fun fetchHls(t: Track) {
+        val url = com.metrolist.desktop.integrations.SoundCloud.stream(t).getOrThrow()
+        val tmp = File(dir, "${file(t.id).name}.part")
+        try {
+            val grabber = org.bytedeco.javacv.FFmpegFrameGrabber(url).apply { start() }
+            try {
+                val recorder = org.bytedeco.javacv.FFmpegFrameRecorder(tmp, grabber.audioChannels).apply {
+                    format = "mp4" // keeps the mp4a codec tag the HLS segments carry
+                    start(grabber.formatContext)
+                }
+                try {
+                    while (true) recorder.recordPacket(grabber.grabPacket() ?: break)
+                } finally {
+                    recorder.stop()
+                    recorder.release()
+                }
+            } finally {
+                grabber.stop()
+                grabber.release()
+            }
+            check(tmp.length() > 0) { "empty download" }
+            Files.move(tmp.toPath(), file(t.id).toPath(), StandardCopyOption.REPLACE_EXISTING)
+            Library.update { it.copy(downloads = it.downloads.filterNot { d -> d.track.id == t.id } + DownloadedTrack(t, null)) }
+        } finally {
+            tmp.delete()
         }
     }
 

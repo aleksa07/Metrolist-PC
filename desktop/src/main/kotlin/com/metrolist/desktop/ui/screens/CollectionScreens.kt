@@ -153,7 +153,7 @@ fun AlbumScreen(screen: Screen.Album) {
                 }
             }
             itemsIndexed(tracks, key = { _, t -> t.id }) { i, t ->
-                TrackRow(t, onClick = { Player.playQueue(tracks, i, page.album.title) }, menu = { trackMenu(nav, t) }, index = i, showArt = false)
+                TrackRow(t, list = tracks, onClick = { Player.playQueue(tracks, i, page.album.title) }, menu = { trackMenu(nav, t) }, index = i, showArt = false)
             }
             if (page.otherVersions.isNotEmpty()) {
                 item { SectionHeader("Other versions") }
@@ -240,7 +240,7 @@ private fun PlaylistContent(
                         }
                     }
                 }
-            TrackRow(t, onClick = { Player.playQueue(songs.toList(), i, playlist.title) }, menu = { trackMenu(nav, t, listOfNotNull(remove)) }, index = i)
+            TrackRow(t, list = songs, onClick = { Player.playQueue(songs.toList(), i, playlist.title) }, menu = { trackMenu(nav, t, listOfNotNull(remove)) }, index = i)
         }
     }
 }
@@ -276,6 +276,7 @@ fun LocalPlaylistScreen(screen: Screen.LocalPlaylist) {
         itemsIndexed(tracks, key = { _, t -> t.id }) { i, t ->
             TrackRow(
                 t,
+                list = tracks,
                 onClick = { Player.playQueue(tracks, i, playlist.name) },
                 menu = {
                     trackMenu(
@@ -358,7 +359,7 @@ fun ArtistScreen(screen: Screen.Artist) {
                 if (songs.size == section.items.size && songs.isNotEmpty()) {
                     val tracks = songs.map { it.toTrack() }
                     itemsIndexed(tracks, key = { _, t -> "${section.title}-${t.id}" }) { i, t ->
-                        TrackRow(t, onClick = { Player.playQueue(tracks, i, section.title) }, menu = { trackMenu(nav, t) })
+                        TrackRow(t, list = tracks, onClick = { Player.playQueue(tracks, i, section.title) }, menu = { trackMenu(nav, t) })
                     }
                 } else {
                     item { Carousel(section.items, nav) }
@@ -395,7 +396,7 @@ fun ArtistItemsScreen(screen: Screen.ArtistItems) {
                     }
                 }
                 itemsIndexed(tracks, key = { i, t -> "$i-${t.id}" }) { i, t ->
-                    TrackRow(t, onClick = { Player.playQueue(tracks, i, screen.title) }, menu = { trackMenu(nav, t) }, index = i)
+                    TrackRow(t, list = tracks, onClick = { Player.playQueue(tracks, i, screen.title) }, menu = { trackMenu(nav, t) }, index = i)
                 }
             }
         } else {
@@ -492,7 +493,7 @@ fun SpotifyPlaylistScreen(screen: Screen.SpotifyPlaylist) {
             }
             if (tracks.isEmpty()) item { Text("This playlist is empty.", Modifier.padding(16.dp), color = MaterialTheme.colorScheme.onSurfaceVariant) }
             itemsIndexed(tracks, key = { i, t -> "$i:${t.id}" }) { i, t ->
-                TrackRow(t, onClick = { Player.playQueue(tracks, i, screen.name) }, menu = { trackMenu(nav, t) })
+                TrackRow(t, list = tracks, onClick = { Player.playQueue(tracks, i, screen.name) }, menu = { trackMenu(nav, t) })
             }
         }
     }

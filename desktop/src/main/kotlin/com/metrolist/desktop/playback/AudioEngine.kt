@@ -34,6 +34,12 @@ class AudioEngine(private val listener: Listener) {
     @Volatile var volume: Float = 1f
     @Volatile var normalizationGain: Float = 1f
 
+    /** Fade the prepared song in over the last [crossfadeMs] of the current one; 0 = gapless only. */
+    @Volatile var crossfadeMs: Long = 0
+
+    /** Tempo without pitch change (FFmpeg atempo), for podcasts. 1 = off. */
+    @Volatile var speed: Float = 1f
+
     /** Java Sound mixer name; blank or unknown means the system default device. Applies to the next [load]. */
     @Volatile var outputDevice: String = ""
     val equalizer = Equalizer()
@@ -150,6 +156,9 @@ class AudioEngine(private val listener: Listener) {
         var grabber: FFmpegFrameGrabber? = null
         var line: SourceDataLine? = null
         var entry = firstEntry
+        // Per decode thread: an old loop may still be winding down when the next load starts.
+        var tail: Tail? = null
+        var tempo: Tempo? = null
         try {
             val t0 = System.nanoTime()
             grabber = open(url)
@@ -161,6 +170,7 @@ class AudioEngine(private val listener: Listener) {
             listener.onReady(durationMs)
 
             var bytes = ByteArray(0)
+            var mix = ShortArray(0)
             var lastTs = 0L
             while (gen == generation) {
                 val seek = seekToMs
@@ -172,6 +182,25 @@ class AudioEngine(private val listener: Listener) {
                     grabber!!.setTimestamp(seek * 1000L, false)
                     positionMs = seek
                     lastTs = seek
+                    tail?.close()
+                    tail = null
+                    tempo?.close()
+                    tempo = null
+                }
+                // Crossfade: the prepared song becomes the main source now and the ending one fades out under it.
+                val cf = crossfadeMs
+                if (cf > 0 && tail == null && durationMs > cf * 2 && lastTs >= durationMs - cf) {
+                    val next = synchronized(lock) { prepared.also { prepared = null; preparingKey = null } }
+                    if (next != null) {
+                        tail = Tail(grabber!!, normalizationGain, ((durationMs - lastTs) * SAMPLE_RATE / 1000 * CHANNELS).toInt().coerceAtLeast(1))
+                        grabber = next.grabber
+                        entry = next.entry
+                        normalizationGain = next.gain
+                        durationMs = (next.grabber.lengthInTime / 1000).coerceAtLeast(0)
+                        lastTs = 0
+                        positionMs = 0
+                        listener.onAdvanced(next.key, durationMs)
+                    }
                 }
                 if (paused) {
                     if (line.isRunning) line.stop()
@@ -183,6 +212,8 @@ class AudioEngine(private val listener: Listener) {
                 }
                 val frame = grabber!!.grabSamples()
                 if (frame == null) {
+                    tail?.close()
+                    tail = null
                     // End of stream: continue into the prepared source on the same audio line, or finish.
                     val next = synchronized(lock) { prepared.also { prepared = null; preparingKey = null } } ?: break
                     close(grabber)
@@ -199,13 +230,37 @@ class AudioEngine(private val listener: Listener) {
                 isBuffering = false
                 if (frame.timestamp > 0) lastTs = frame.timestamp / 1000
                 val n = samples.remaining()
-                if (bytes.size < n * 2) bytes = ByteArray(n * 2)
-                val gain = (volume * normalizationGain).coerceIn(0f, 4f)
+                if (mix.size < n) mix = ShortArray(n)
+                val vol = volume.coerceIn(0f, 4f)
+                val norm = normalizationGain
                 val eq = equalizer.active
+                val t = tail?.takeIf { it.fill(n) }
                 for (i in 0 until n) {
-                    var s = samples.get(samples.position() + i).toInt()
+                    var f = samples.get(samples.position() + i) * norm
+                    if (t != null) f = t.mix(f)
+                    var s = f.toInt().coerceIn(Short.MIN_VALUE.toInt(), Short.MAX_VALUE.toInt())
                     if (eq) s = equalizer.process(s, i % CHANNELS)
-                    if (eq || gain != 1f) s = (s * gain).toInt().coerceIn(Short.MIN_VALUE.toInt(), Short.MAX_VALUE.toInt())
+                    mix[i] = (s * vol).toInt().coerceIn(Short.MIN_VALUE.toInt(), Short.MAX_VALUE.toInt()).toShort()
+                }
+                if (tail?.done == true) {
+                    tail?.close()
+                    tail = null
+                }
+                // Speed: the PCM goes through atempo, so each written sample covers sp samples of the song.
+                val sp = speed
+                var out = mix
+                var outN = n
+                if (sp != 1f) {
+                    val f = tempo?.takeIf { it.speed == sp } ?: Tempo(sp).also { tempo?.close(); tempo = it }
+                    outN = f.process(mix, n)
+                    out = f.out
+                } else if (tempo != null) {
+                    tempo?.close()
+                    tempo = null
+                }
+                if (bytes.size < outN * 2) bytes = ByteArray(outN * 2)
+                for (i in 0 until outN) {
+                    val s = out[i].toInt()
                     bytes[i * 2] = (s and 0xff).toByte()
                     bytes[i * 2 + 1] = (s shr 8 and 0xff).toByte()
                 }
@@ -217,12 +272,12 @@ class AudioEngine(private val listener: Listener) {
                 ringPos = p
                 if (!line.isRunning) line.start()
                 var off = 0
-                val len = n * 2
+                val len = outN * 2
                 while (off < len && gen == generation && seekToMs < 0) {
                     off += line.write(bytes, off, minOf(len - off, line.bufferSize / 2))
                     val buffered = line.bufferSize - line.available()
                     bufferedFrames = buffered / (CHANNELS * 2) + (len - off) / (CHANNELS * 2)
-                    positionMs = (lastTs + (off / bytesPerMs) - buffered / bytesPerMs).toLong().coerceAtLeast(0)
+                    positionMs = (lastTs + (off - buffered) / bytesPerMs * sp).toLong().coerceAtLeast(0)
                     if (paused) break
                 }
             }
@@ -241,10 +296,102 @@ class AudioEngine(private val listener: Listener) {
         } finally {
             runCatching { line?.stop(); line?.close() }
             close(grabber)
+            tail?.close()
+            tail = null
+            tempo?.close()
+            tempo = null
         }
     }
 
+    /** The song that is fading out during a crossfade, mixed under the new one for its last [total] samples. */
+    private inner class Tail(val grabber: FFmpegFrameGrabber, val gain: Float, val total: Int) {
+        private val pcm = Pcm()
+        private var left = total
+        private var ended = false
+        val done get() = left <= 0 || (ended && pcm.size == 0)
+
+        /** Buffers [n] samples of the old song; false when it has nothing more to give. */
+        fun fill(n: Int): Boolean {
+            while (!ended && pcm.size < n) {
+                // A read error just ends the fade early instead of stopping playback.
+                val b = runCatching { grabber.grabSamples() }.getOrNull()?.samples?.firstOrNull() as? ShortBuffer
+                if (b == null) ended = true else pcm.add(b)
+            }
+            return !done
+        }
+
+        fun mix(f: Float): Float {
+            if (left <= 0 || pcm.size == 0) return f
+            val fadeIn = 1f - left.toFloat() / total
+            left--
+            return f * fadeIn + pcm.take() * gain * (1f - fadeIn)
+        }
+
+        fun close() = close(grabber)
+    }
+
+    private class Tempo(val speed: Float) {
+        private val filter =
+            org.bytedeco.javacv.FFmpegFrameFilter("atempo=$speed", CHANNELS).apply {
+                sampleFormat = avutil.AV_SAMPLE_FMT_S16
+                sampleRate = SAMPLE_RATE
+                start()
+            }
+        var out = ShortArray(0)
+            private set
+
+        /** Pushes [n] samples of [pcm] and returns how many came out into [out]. */
+        fun process(pcm: ShortArray, n: Int): Int {
+            filter.pushSamples(0, CHANNELS, SAMPLE_RATE, avutil.AV_SAMPLE_FMT_S16, ShortBuffer.wrap(pcm, 0, n))
+            var count = 0
+            while (true) {
+                val b = filter.pullSamples()?.samples?.firstOrNull() as? ShortBuffer ?: break
+                val m = b.remaining()
+                if (out.size < count + m) out = out.copyOf(maxOf(count + m, out.size * 2))
+                b.get(b.position(), out, count, m)
+                count += m
+            }
+            return count
+        }
+
+        fun close() = runCatching { filter.stop(); filter.release() }
+    }
+
+    /** Growable FIFO of PCM samples. */
+    internal class Pcm {
+        private var buf = ShortArray(4096)
+        private var start = 0
+        private var end = 0
+        val size get() = end - start
+
+        fun add(src: ShortBuffer) {
+            val n = src.remaining()
+            if (end + n > buf.size) {
+                buf = if (size + n > buf.size) buf.copyOfRange(start, end).copyOf(maxOf(buf.size * 2, size + n)) else buf.copyInto(buf, 0, start, end)
+                end -= start
+                start = 0
+            }
+            src.get(src.position(), buf, end, n)
+            end += n
+        }
+
+        fun take(): Short = buf[start++]
+    }
+
     companion object {
+        fun selfCheck() {
+            val p = Pcm()
+            val got = ArrayList<Short>()
+            var next = 0
+            repeat(50) { round ->
+                val chunk = ShortArray(round * 97 % 3000 + 1) { (next++).toShort() }
+                p.add(ShortBuffer.wrap(chunk))
+                repeat(p.size / 2) { got += p.take() }
+            }
+            while (p.size > 0) got += p.take()
+            check(got.size == next && got.withIndex().all { (i, v) -> v == i.toShort() }) { "pcm fifo keeps order" }
+        }
+
         const val SAMPLE_RATE = 48_000
         const val CHANNELS = 2
         private const val RING = 32_768

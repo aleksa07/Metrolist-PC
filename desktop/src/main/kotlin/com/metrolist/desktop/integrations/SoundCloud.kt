@@ -119,6 +119,11 @@ object SoundCloud {
             items.mapNotNull { byId[it.long("id")]?.let(::toTrack) }
         }
 
+    suspend fun search(query: String): Result<List<Track>> =
+        runCatching {
+            get("/search/tracks?q=${URLEncoder.encode(query, Charsets.UTF_8)}&limit=50").arr("collection").orEmpty().mapNotNull { (it as? JsonObject)?.let(::toTrack) }
+        }
+
     private fun toTrack(t: JsonObject): Track? {
         if (t.str("policy") == "BLOCK") return null
         return Track(
