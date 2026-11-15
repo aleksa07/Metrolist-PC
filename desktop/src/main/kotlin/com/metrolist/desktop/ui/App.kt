@@ -37,7 +37,9 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationRail
 import androidx.compose.material3.NavigationRailItem
-import androidx.compose.material3.Snackbar
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.outlined.ErrorOutline
+import androidx.compose.material3.SnackbarData
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
@@ -118,7 +120,7 @@ fun App(state: AppState) {
     LaunchedEffect(Unit) { Ui.messageFlow.collect { snackbar.showSnackbar(it) } }
     LaunchedEffect(error) {
         error?.let {
-            snackbar.showSnackbar(it)
+            snackbar.showSnackbar(it, withDismissAction = true) // marks it as an error, see Notice
             Player.clearError()
         }
     }
@@ -167,7 +169,7 @@ fun App(state: AppState) {
                 com.metrolist.desktop.integrations.Updater.available?.takeIf { !settings.autoInstallUpdates }?.let { r -> UpdateBanner(r.version) }
                 LaunchedEffect(nav.current) { Selection.clear() }
                 SelectionBar(Modifier.align(Alignment.BottomCenter).padding(bottom = 104.dp))
-                SnackbarHost(snackbar, Modifier.align(Alignment.BottomCenter).padding(bottom = 100.dp)) { Snackbar(it) }
+                SnackbarHost(snackbar, Modifier.align(Alignment.BottomCenter).padding(bottom = 104.dp)) { Notice(it) }
                 AddToPlaylistDialog()
             }
         }
@@ -175,6 +177,28 @@ fun App(state: AppState) {
 }
 
 private val TitleBarHeight = 32.dp
+
+/** Compact toast above the player bar, styled like the menus; errors get an icon and a close button. */
+@Composable
+private fun Notice(data: SnackbarData) {
+    val error = data.visuals.withDismissAction
+    Surface(
+        Modifier.padding(horizontal = 16.dp).widthIn(max = 560.dp),
+        shape = RoundedCornerShape(12.dp),
+        color = MaterialTheme.colorScheme.surfaceContainerHighest,
+        contentColor = MaterialTheme.colorScheme.onSurface,
+        shadowElevation = 8.dp,
+    ) {
+        Row(Modifier.padding(start = 16.dp, end = if (error) 4.dp else 16.dp, top = 10.dp, bottom = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+            if (error) {
+                Icon(Icons.Outlined.ErrorOutline, null, Modifier.size(18.dp), tint = MaterialTheme.colorScheme.error)
+                Spacer(Modifier.width(12.dp))
+            }
+            Text(data.visuals.message, style = MaterialTheme.typography.bodyMedium, maxLines = 3, modifier = Modifier.weight(1f, fill = false))
+            if (error) IconButton(onClick = data::dismiss, modifier = Modifier.size(32.dp)) { Icon(Icons.Default.Close, "Dismiss", Modifier.size(16.dp)) }
+        }
+    }
+}
 
 /** The window's title bar: logo, name and (on Windows) the window buttons; the rest of it drags the window. */
 @Composable
