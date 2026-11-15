@@ -17,9 +17,16 @@ object SmokeTest {
     fun main(args: Array<String>) = runSmokeTest(args.firstOrNull())
 }
 
-/** End-to-end check without UI: search, resolve, then decode ~6 s of audio at zero volume. */
-fun runSmokeTest(queryArg: String?): Unit = runBlocking {
-    val query = queryArg ?: "Daft Punk One More Time"
+/** Offline checks only (no network, no audio device), so CI can run them before packaging. */
+object SelfCheck {
+    @JvmStatic
+    fun main(args: Array<String>) {
+        runSelfChecks()
+        exitProcess(0) // stores started by the checks keep non-daemon threads alive
+    }
+}
+
+fun runSelfChecks() {
     com.metrolist.desktop.playback.Spectrum.selfCheck()
     println("spectrum self-check: ok")
     com.metrolist.desktop.playback.Equalizer.selfCheck()
@@ -58,6 +65,12 @@ fun runSmokeTest(queryArg: String?): Unit = runBlocking {
     println("spotify self-check: ok")
     com.metrolist.desktop.integrations.SoundCloud.selfCheck()
     println("soundcloud self-check: ok")
+}
+
+/** End-to-end check without UI: search, resolve, then decode ~6 s of audio at zero volume. */
+fun runSmokeTest(queryArg: String?): Unit = runBlocking {
+    val query = queryArg ?: "Daft Punk One More Time"
+    runSelfChecks()
     // Informational: a public playlist big enough that most tracks come back as bare ids.
     com.metrolist.desktop.integrations.SoundCloud.tracks("545610837").fold(
         { println("soundcloud playlist: ${it.size} tracks, first: ${it.firstOrNull()?.let { t -> "${t.title} - ${t.artistText} (${t.durationSec}s)" }}") },

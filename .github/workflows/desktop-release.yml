@@ -39,6 +39,9 @@ jobs:
           distribution: temurin
           java-version: "21"
       - uses: gradle/actions/setup-gradle@v4
+      - name: Offline self-checks
+        # A failing check stops this platform's installer from being published.
+        run: ./gradlew selfCheck --no-configuration-cache
       - name: Build installer
         run: |
           VERSION=1.0.0

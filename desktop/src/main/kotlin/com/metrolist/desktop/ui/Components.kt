@@ -154,13 +154,25 @@ fun trackMenu(
     buildList {
         add(MenuEntry("Play next", Icons.AutoMirrored.Filled.PlaylistPlay) { Player.playNext(listOf(track)); Ui.toast("Will play next") })
         add(MenuEntry("Add to queue", Icons.AutoMirrored.Filled.QueueMusic) { Player.addToQueue(listOf(track)); Ui.toast("Added to queue") })
-        add(MenuEntry("Start radio", Icons.Default.Radio) { Player.playSong(track) })
+        when {
+            com.metrolist.desktop.integrations.SoundCloud.isTrack(track) -> Unit // radio comes from YouTube Music
+            // The radio needs the YouTube Music song, so match the Spotify song first.
+            com.metrolist.desktop.integrations.Spotify.isPlaceholder(track) ->
+                add(MenuEntry("Start radio", Icons.Default.Radio) {
+                    Ui.scope.launch {
+                        com.metrolist.desktop.integrations.Spotify.match(track)
+                            .onSuccess { Player.playSong(it) }
+                            .onFailure { Ui.toast("Couldn't find this song on YouTube Music") }
+                    }
+                })
+            else -> add(MenuEntry("Start radio", Icons.Default.Radio) { Player.playSong(track) })
+        }
         val liked = Library.isLiked(track.id)
         add(MenuEntry(if (liked) "Remove from liked songs" else "Like", if (liked) Icons.Default.Favorite else Icons.Default.FavoriteBorder) { Actions.toggleLike(track) })
         add(MenuEntry("Add to playlist…", Icons.AutoMirrored.Filled.PlaylistAdd) { Ui.addToPlaylist = listOf(track) })
         if (Library.value.downloads.any { it.track.id == track.id }) {
             add(MenuEntry("Remove download", Icons.Default.DownloadDone) { com.metrolist.desktop.data.Downloads.remove(track.id); Ui.toast("Download removed") })
-        } else {
+        } else if (':' !in track.id) {
             add(MenuEntry("Download", Icons.Default.Download) { Actions.download(listOf(track)) })
         }
         track.album?.let { a -> add(MenuEntry("Go to album", Icons.Default.Album) { nav.push(Screen.Album(a.id)) }) }

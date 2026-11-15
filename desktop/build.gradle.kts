@@ -159,6 +159,14 @@ protobuf {
     }
 }
 
+tasks.register<JavaExec>("selfCheck") {
+    group = "verification"
+    description = "Offline self-checks (no network or audio), run by CI before packaging."
+    classpath = sourceSets["main"].runtimeClasspath
+    mainClass.set("com.metrolist.desktop.SelfCheck")
+    javaLauncher.set(javaToolchains.launcherFor { languageVersion.set(JavaLanguageVersion.of(21)) })
+}
+
 tasks.register<JavaExec>("smokeTest") {
     group = "verification"
     description = "Searches YouTube Music, resolves a stream and decodes a few seconds of audio."

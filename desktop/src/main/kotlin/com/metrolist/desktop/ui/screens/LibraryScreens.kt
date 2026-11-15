@@ -73,17 +73,19 @@ fun LibraryScreen() {
     val nav = LocalNavigator.current
     val lib by Library.state.collectAsState()
     val settings by Settings.state.collectAsState()
-    var tab by rememberSaveable { mutableIntStateOf(0) }
+    // By name: the account tabs come and go with sign-in, which would shift positions.
+    var tab by rememberSaveable { mutableStateOf("Songs") }
     var creating by remember { mutableStateOf(false) }
     val visibleTabs = tabs.filter { (it != "YouTube Music" || settings.cookie.isNotBlank()) && (it != "Spotify" || settings.spotifyCookie.isNotBlank()) && (it != "SoundCloud" || settings.soundcloudToken.isNotBlank()) }
+    val shown = tab.takeIf { it in visibleTabs } ?: "Songs"
     Column {
         Row(Modifier.padding(horizontal = 24.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
             Text("Library", style = MaterialTheme.typography.displaySmall, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
         }
         LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(horizontal = 24.dp)) {
-            itemsIndexed(visibleTabs) { i, t -> FilterChip(selected = tab == i, onClick = { tab = i }, label = { Text(t) }) }
+            items(visibleTabs) { t -> FilterChip(selected = shown == t, onClick = { tab = t }, label = { Text(t) }) }
         }
-        when (visibleTabs.getOrNull(tab)) {
+        when (shown) {
             "Songs" -> {
                 val liked = lib.liked
                 LazyColumn(contentPadding = screenPadding) {
@@ -108,7 +110,7 @@ fun LibraryScreen() {
                         Tile(null, "New playlist", "Create", RoundedCornerShape(8.dp), icon = true) { creating = true }
                     }
                     item {
-                        Tile(lib.liked.firstOrNull()?.thumbnail, "Liked songs", "${lib.liked.size} songs", RoundedCornerShape(8.dp)) { tab = 0 }
+                        Tile(lib.liked.firstOrNull()?.thumbnail, "Liked songs", "${lib.liked.size} songs", RoundedCornerShape(8.dp)) { tab = "Songs" }
                     }
                     items(lib.playlists, key = { it.id }) { pl ->
                         WithContextMenu({ listOf(MenuEntry("Play", Icons.Default.Favorite) { Player.playQueue(pl.tracks, 0, pl.name) }) }) {
