@@ -46,7 +46,7 @@ fun main(args: Array<String>) {
         System.setErr(log)
         return runSmokeTest(null)
     }
-    if (alreadyRunning()) return
+    if (alreadyRunning()) exitWithoutClassArchive()
     // Building the YouTube client (HTTP stack, JSON) takes ~0.5 s; do it off the UI thread.
     Thread({ applyAccountSettings() }, "youtube-init").start()
     Ui.scope.launch(kotlinx.coroutines.Dispatchers.IO) {
@@ -179,7 +179,23 @@ fun main(args: Array<String>) {
     }
 }
 
-private val showRequests = kotlinx.coroutines.channels.Channel<Unit>(kotlinx.coroutines.channels.Channel.CONFLATED)
+private interface CRuntime : com.sun.jna.Library {
+    @Suppress("FunctionName")
+    fun _exit(code: Int)
+}
+
+/**
+ * The JVM writes the startup class archive (AppCDS, see build.gradle.kts) on any normal exit, even halt(),
+ * and then keeps it. A second launch that only wakes the first copy would leave an archive of ~3 classes,
+ * so it exits natively instead.
+ */
+private fun exitWithoutClassArchive(): Nothing {
+    val lib = if (System.getProperty("os.name").startsWith("Windows")) "msvcrt" else "c"
+    runCatching { com.sun.jna.Native.load(lib, CRuntime::class.java)._exit(0) }
+    kotlin.system.exitProcess(0)
+}
+
+private val showRequests =kotlinx.coroutines.channels.Channel<Unit>(kotlinx.coroutines.channels.Channel.CONFLATED)
 private const val HELLO = "metrolist"
 
 /**
